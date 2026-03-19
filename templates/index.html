@@ -1,0 +1,23 @@
+<!-- Define the document type as HTML5 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <!-- Set the character encoding to UTF-8 -->
+    <meta charset="UTF-8">
+    <!-- Ensure proper rendering on mobile devices -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sales Report Generator</title>
+</head>
+<body>
+    <h1>AI Sales Narrative Generator</h1>
+    <p>Upload your Excel sales report to begin.</p>
+    <!-- Create a form that posts data to the /uploadfile/ endpoint -->
+    <!-- enctype="multipart/form-data" is required for sending files -->
+    <form action="/uploadfile/" enctype="multipart/form-data" method="post">
+        <!-- Input field for selecting a file, limited to Excel formats -->
+        <input name="file" type="file" accept=".xlsx, .xls">
+        <!-- Button to submit the form -->
+        <input type="submit" value="Upload and Analyze">
+    </form>
+</body>
+</html>

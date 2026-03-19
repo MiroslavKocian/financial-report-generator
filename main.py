@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager  # Import context manager for lifespan events
 import shutil  # Import shutil to help with high-level file operations like copying
 import os  # Import os to handle file paths
 from fastapi import FastAPI, Request, UploadFile, File  # Import FastAPI components
@@ -6,17 +7,20 @@ from fastapi.templating import Jinja2Templates  # Import Jinja2 for HTML templat
 from file_manager import setup_upload_dir  # Import our helper function to get the upload folder
 from database import init_db, save_upload_metadata  # Import database functions
 
-# Create the main FastAPI application instance
-app = FastAPI()
-
-# Set up the templates directory for loading HTML files
-templates = Jinja2Templates(directory="templates")
-
-# Define a startup event handler
-@app.on_event("startup")
-def on_startup():
-    # Initialize the database (create tables) when the server starts
+# Define lifespan context manager (replaces the deprecated startup event)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: Initialize the database
     init_db()
+    print("--- Application startup complete. Database initialized. ---")
+    yield
+    # Shutdown logic (if needed) goes here
+
+# Create the main FastAPI application instance with the lifespan handler
+app = FastAPI(lifespan=lifespan)
+
+# Set up the templates directory using an absolute path to avoid "TemplateNotFound" errors
+templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "templates"))
 
 # Define the route for the home page (GET request to root "/")
 @app.get("/", response_class=HTMLResponse)
@@ -43,3 +47,8 @@ async def create_upload_file(file: UploadFile = File(...)):
     
     # Return the filename, the new database ID, and the status
     return {"filename": file.filename, "file_id": file_id, "status": "File uploaded successfully"}
+
+if __name__ == "__main__":
+    import uvicorn
+    # Run the server directly when this script is executed
+    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
