@@ -54,3 +54,7 @@ venv/
 
 # VS Code
 .vscode/
+
+# Project specific ignores
+uploads/
+sales_data.db
