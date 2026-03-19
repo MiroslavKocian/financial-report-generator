@@ -4,6 +4,7 @@ import shutil  # Import shutil to clean up directories
 from fastapi.testclient import TestClient  # Import TestClient to simulate web requests
 from main import app  # Import our FastAPI app
 from file_manager import UPLOAD_DIR  # Import the upload directory constant
+from database import init_db, DB_NAME  # Import database setup functions
 
 # Create a test client that will make requests to our app
 client = TestClient(app)
@@ -11,12 +12,19 @@ client = TestClient(app)
 class TestMainApp(unittest.TestCase):
 
     def setUp(self):
-        # Run before every test: Clean up the upload directory to start fresh
+        # Initialize the database to ensure tables exist
+        if os.path.exists(DB_NAME):
+            os.remove(DB_NAME)
+        init_db()
+        # Clean up the upload directory to start fresh
         if os.path.exists(UPLOAD_DIR):
             shutil.rmtree(UPLOAD_DIR)
 
     def tearDown(self):
-        # Run after every test: Clean up the upload directory
+        # Clean up the database file
+        if os.path.exists(DB_NAME):
+            os.remove(DB_NAME)
+        # Clean up the upload directory
         if os.path.exists(UPLOAD_DIR):
             shutil.rmtree(UPLOAD_DIR)
 
@@ -34,8 +42,14 @@ class TestMainApp(unittest.TestCase):
 
         # Check 1: The server should respond with status code 200 (OK)
         self.assertEqual(response.status_code, 200)
-        # Check 2: The response JSON should say the file was uploaded successfully
-        self.assertEqual(response.json(), {"filename": filename, "status": "File uploaded successfully"})
+        
+        # Get the JSON response
+        json_response = response.json()
+        # Check 2: Verify the response contains the filename, status, and a file_id
+        self.assertEqual(json_response["filename"], filename)
+        self.assertEqual(json_response["status"], "File uploaded successfully")
+        self.assertIsInstance(json_response["file_id"], int)
+
         # Check 3: The file should physically exist in the 'uploads' folder
         self.assertTrue(os.path.exists(os.path.join(UPLOAD_DIR, filename)))
 
