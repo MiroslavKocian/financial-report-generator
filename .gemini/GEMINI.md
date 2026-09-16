@@ -90,3 +90,12 @@
 **Explain the why** — When suggesting something non-obvious, say why.
 
 **Surface tradeoffs** — Name what is being traded away, not just what was chosen.
+
+## Project Specific Requirements (Financial Report Generator)
+
+- **No Streamlit** — Use standard web technologies (HTML/FastAPI).
+- **Free Tools Only** — No paid APIs or licensed software.
+- **Educational Goal** — Prioritize learning Python, SQL, REST APIs, FastAPI, Docker.
+- **Step-by-Step** — Go slowly, one function at a time.
+- **Documentation** — Comment every line of code for clarity.
+- **SQL Mastery** — Write raw SQL queries manually (no ORMs like SQLAlchemy for inserts).
