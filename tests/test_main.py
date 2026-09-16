@@ -28,6 +28,17 @@ class TestMainApp(unittest.TestCase):
         if os.path.exists(UPLOAD_DIR):
             shutil.rmtree(UPLOAD_DIR)
 
+    def test_read_root_endpoint(self):
+        # Send a GET request to the root URL "/"
+        response = client.get("/")
+        
+        # Verify that the server responds with HTTP 200 OK
+        self.assertEqual(response.status_code, 200)
+        # Verify that the response content type is HTML
+        self.assertIn("text/html", response.headers["content-type"])
+        # Verify that the returned HTML contains our app title
+        self.assertIn("Financial Report Generator", response.text)
+
     def test_upload_file_endpoint(self):
         # Define a fake filename and some fake content
         filename = "test_report.xlsx"

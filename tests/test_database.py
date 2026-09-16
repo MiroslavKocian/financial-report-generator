@@ -28,5 +28,23 @@ class TestDatabase(unittest.TestCase):
         # Verify that the ID is greater than 0 (database IDs usually start at 1)
         self.assertGreater(file_id, 0)
 
+    def test_save_upload_metadata_persists_in_db(self):
+        from database import get_db_connection
+
+        # Save metadata to generate a row
+        filename = "persisted_test.xlsx"
+        file_id = save_upload_metadata(filename)
+
+        # Query the database directly to check if the record exists
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT filename FROM uploads WHERE id = ?", (file_id,))
+        row = cursor.fetchone()
+        conn.close()
+
+        # Verify that a row was found and the filename matches
+        self.assertIsNotNone(row)
+        self.assertEqual(row["filename"], filename)
+
 if __name__ == '__main__':
     unittest.main()

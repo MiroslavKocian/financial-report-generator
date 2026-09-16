@@ -26,7 +26,7 @@ templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "t
 @app.get("/", response_class=HTMLResponse)
 async def read_root(request: Request):
     # Render the index.html template and return it to the browser
-    return templates.TemplateResponse("index.html", {"request": request})
+    return templates.TemplateResponse(request, "index.html")
 
 
 # Define the route to handle file uploads (POST request to "/uploadfile/")

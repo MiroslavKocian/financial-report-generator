@@ -2,7 +2,7 @@ import unittest  # Import the standard Python testing framework
 import os  # Import the os module to check for file existence
 import shutil  # Import the shutil module to help us delete directories recursively
 # Import the function 'setup_upload_dir' and the variable 'UPLOAD_DIR' from our file_manager.py
-from file_manager import setup_upload_dir, UPLOAD_DIR
+from file_manager import setup_upload_dir, save_uploaded_file, UPLOAD_DIR
 
 # Define a test class that inherits from unittest.TestCase
 class TestFileManager(unittest.TestCase):
@@ -33,6 +33,25 @@ class TestFileManager(unittest.TestCase):
         self.assertEqual(result, UPLOAD_DIR)
         # Verify (Assert) that the directory actually exists on the disk now
         self.assertTrue(os.path.exists(UPLOAD_DIR))
+
+    def test_save_uploaded_file(self):
+        # Create a mock upload file object with standard attributes
+        from io import BytesIO
+        from fastapi import UploadFile
+
+        file_content = b"sample excel content"
+        fake_file = UploadFile(
+            filename="sample.xlsx",
+            file=BytesIO(file_content)
+        )
+
+        # Call the file_manager function to save the uploaded file
+        saved_path = save_uploaded_file(fake_file)
+
+        # Verify that the returned file path exists on disk
+        self.assertTrue(os.path.exists(saved_path))
+        # Verify that the path points to the correct folder and file name
+        self.assertEqual(saved_path, os.path.join(UPLOAD_DIR, "sample.xlsx"))
 
 # This block checks if this file is being run directly by Python
 if __name__ == '__main__':
