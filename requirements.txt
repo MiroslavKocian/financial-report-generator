@@ -1,5 +1,14 @@
+# Core web framework for building REST APIs
 fastapi
+
+# ASGI server to run the FastAPI application with auto-reload support
 uvicorn[standard]
+
+# Template engine used to render HTML files (like index.html)
 jinja2
+
+# Required by FastAPI to handle file uploads and multipart form data
 python-multipart
+
+# HTTP client required by FastAPI's TestClient to run automated tests
 httpx
