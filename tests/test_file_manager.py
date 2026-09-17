@@ -37,10 +37,10 @@ class TestFileManager(unittest.TestCase):
     def test_save_uploaded_file(self):
         # Create a mock upload file object with standard attributes
         from io import BytesIO
-        from fastapi import UploadFile
+        from types import SimpleNamespace
 
         file_content = b"sample excel content"
-        fake_file = UploadFile(
+        fake_file = SimpleNamespace(
             filename="sample.xlsx",
             file=BytesIO(file_content)
         )
