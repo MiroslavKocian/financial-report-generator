@@ -43,3 +43,53 @@ def save_upload_metadata(filename: str) -> int:
     conn.close()
     # Return the ID of the newly created record
     return new_id
+
+def insert_generic_row(
+    table_name: str, 
+    row_data: dict
+) -> int:
+    """
+    Inserts a single generic row into any SQLite table 
+    using a fully dynamic, manual raw SQL INSERT statement.
+    Parameters:
+        table_name (str): The name of the database table.
+        row_data (dict): Dictionary of column names and their values.
+    Returns:
+        int: The primary key ID of the newly inserted row.
+    """
+    # Establish a connection to the SQLite database
+    conn = get_db_connection()
+    
+    # Create a cursor object to execute raw SQL commands
+    cursor = conn.cursor()
+    
+    # Extract column names dynamically from dictionary keys
+    columns = ", ".join(row_data.keys())
+    
+    # Generate question mark placeholders for parameterized query
+    placeholders = ", ".join(["?" for _ in row_data])
+    
+    # Construct the raw SQL insert query dynamically
+    sql = f"""
+        INSERT INTO {table_name} 
+        ({columns})
+        VALUES ({placeholders})
+    """
+    
+    # Extract values from the dictionary into a tuple
+    values = tuple(row_data.values())
+    
+    # Execute the raw SQL query with parameters for security
+    cursor.execute(sql, values)
+    
+    # Commit the transaction to permanently save the record
+    conn.commit()
+    
+    # Retrieve the unique primary key ID generated for this row
+    new_row_id = cursor.lastrowid
+    
+    # Close the database connection to release resources
+    conn.close()
+    
+    # Return the newly created row ID
+    return new_row_id

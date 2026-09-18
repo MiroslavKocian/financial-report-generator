@@ -12,3 +12,9 @@ python-multipart
 
 # HTTP client required by FastAPI's TestClient to run automated tests
 httpx
+
+# Data analysis and manipulation library used to read Excel files
+pandas
+
+# Engine required by pandas to read and write Excel (.xlsx) files
+openpyxl

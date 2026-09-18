@@ -7,6 +7,7 @@ from fastapi.templating import Jinja2Templates  # Import Jinja2 for HTML templat
 from file_manager import (
     setup_upload_dir,  # Helper function to get upload folder
 )
+import pandas as pd  # Import pandas to read Excel files
 from database import init_db, save_upload_metadata  # Import database functions
 
 # Define lifespan context manager (replaces the deprecated startup event)
@@ -36,24 +37,61 @@ async def read_root(request: Request):
 # Define the route to handle file uploads (POST request to "/uploadfile/")
 @app.post("/uploadfile/")
 async def create_upload_file(file: UploadFile = File(...)):
-    # Ensure the upload directory exists and get its path
+    """
+    Handles file upload from the browser, saves file to disk, 
+    records metadata, reads Excel rows via pandas, and stores 
+    raw data into SQLite using manual raw SQL.
+    """
     upload_dir = setup_upload_dir()
-    # Create the full file path by joining the folder path and the filename
     file_location = os.path.join(upload_dir, file.filename)
     
-    # Open the specific file path in write-binary mode
+    # Save the physical file to disk
     with open(file_location, "wb") as buffer:
-        # Efficiently copy the uploaded file stream to the local file on disk
         shutil.copyfileobj(file.file, buffer)
 
-    # Save the filename to the database and get the new record ID
+    # Save upload metadata to 'uploads' table via raw SQL
     file_id = save_upload_metadata(file.filename)
     
-    # Return the filename, the new database ID, and the status
+    # Read the uploaded Excel file using pandas
+    df = pd.read_excel(file_location)
+    
+    # Normalize column names for safe SQL usage (lowercase, replace spaces)
+    df.columns = [
+        str(col).strip().lower().replace(" ", "_") 
+        for col in df.columns
+    ]
+    
+    # Dynamically create a table for this upload using raw SQL
+    conn = get_db_connection()
+    with conn:
+        col_defs = ", ".join([f"{col} TEXT" for col in df.columns])
+        conn.execute(f"""
+            CREATE TABLE IF NOT EXISTS dynamic_sales_data (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                upload_id INTEGER,
+                {col_defs},
+                FOREIGN KEY (upload_id) REFERENCES uploads (id)
+            )
+        """)
+    conn.close()
+    
+    # Insert each row from the Excel file into SQLite using insert_generic_row
+    inserted_rows_count = 0
+    for _, row in df.iterrows():
+        # Convert pandas row to dictionary and add upload_id foreign key
+        row_dict = row.to_dict()
+        row_dict["upload_id"] = file_id
+        
+        # Insert using our raw SQL generic inserter
+        insert_generic_row("dynamic_sales_data", row_dict)
+        inserted_rows_count += 1
+
+    # Return success response to the browser
     return {
-    "filename": file.filename,
-    "file_id": file_id,
-    "status": "File uploaded successfully",
+        "filename": file.filename, 
+        "file_id": file_id, 
+        "rows_stored": inserted_rows_count,
+        "status": "File uploaded and raw data stored successfully via raw SQL"
     }
 
 if __name__ == "__main__":
