@@ -46,9 +46,10 @@ class TestMainApp(unittest.TestCase):
 
         # Send a POST request to "/uploadfile/" with the fake file
         # 'files' dictionary format: {'field_name': ('filename', content, 'content_type')}
+        mime_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         response = client.post(
             "/uploadfile/",
-            files={"file": (filename, file_content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
+            files={"file": (filename, file_content, mime_type)},
         )
 
         # Check 1: The server should respond with status code 200 (OK)
