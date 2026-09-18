@@ -44,8 +44,7 @@ class TestMainApp(unittest.TestCase):
         filename = "test_report.xlsx"
         file_content = b"fake excel content"
 
-        # Send a POST request to "/uploadfile/" with the fake file
-        # 'files' dictionary format: {'field_name': ('filename', content, 'content_type')}
+        # POST request with fake file: {'field': ('name', content, 'type')}
         mime_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         response = client.post(
             "/uploadfile/",
