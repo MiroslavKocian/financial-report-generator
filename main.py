@@ -8,7 +8,12 @@ from file_manager import (
     setup_upload_dir,  # Helper function to get upload folder
 )
 import pandas as pd  # Import pandas to read Excel files
-from database import init_db, save_upload_metadata  # Import database functions
+from database import (
+    init_db, 
+    save_upload_metadata, 
+    insert_generic_row, 
+    get_db_connection  # <--- Make sure this is included!
+)
 
 # Define lifespan context manager (replaces the deprecated startup event)
 @asynccontextmanager
@@ -42,20 +47,31 @@ async def create_upload_file(file: UploadFile = File(...)):
     records metadata, reads Excel rows via pandas, and stores 
     raw data into SQLite using manual raw SQL.
     """
+    import pandas as pd
+    from fastapi import HTTPException
+
+    # Ensure the upload directory exists and get its path
     upload_dir = setup_upload_dir()
     file_location = os.path.join(upload_dir, file.filename)
     
-    # Save the physical file to disk
+    # Save physical file to disk
     with open(file_location, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
-    # Save upload metadata to 'uploads' table via raw SQL
+    # Save metadata to uploads table via raw SQL
     file_id = save_upload_metadata(file.filename)
     
-    # Read the uploaded Excel file using pandas
-    df = pd.read_excel(file_location)
+    # Attempt to read the uploaded Excel file using pandas
+    try:
+        df = pd.read_excel(file_location, engine="openpyxl")
+    except Exception as e:
+        # Fail fast and raise HTTP 400 if file is not a valid Excel file
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Invalid Excel file format: {str(e)}"
+        )
     
-    # Normalize column names for safe SQL usage (lowercase, replace spaces)
+    # Normalize column names for safe SQL usage
     df.columns = [
         str(col).strip().lower().replace(" ", "_") 
         for col in df.columns
@@ -75,10 +91,9 @@ async def create_upload_file(file: UploadFile = File(...)):
         """)
     conn.close()
     
-    # Insert each row from the Excel file into SQLite using insert_generic_row
+    # Insert each row from the Excel file into SQLite
     inserted_rows_count = 0
     for _, row in df.iterrows():
-        # Convert pandas row to dictionary and add upload_id foreign key
         row_dict = row.to_dict()
         row_dict["upload_id"] = file_id
         
@@ -86,12 +101,11 @@ async def create_upload_file(file: UploadFile = File(...)):
         insert_generic_row("dynamic_sales_data", row_dict)
         inserted_rows_count += 1
 
-    # Return success response to the browser
     return {
         "filename": file.filename, 
         "file_id": file_id, 
         "rows_stored": inserted_rows_count,
-        "status": "File uploaded and raw data stored successfully via raw SQL"
+        "status": "File uploaded and raw data stored via raw SQL"
     }
 
 if __name__ == "__main__":

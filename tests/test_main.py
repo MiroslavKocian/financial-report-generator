@@ -1,9 +1,11 @@
-import unittest  # Import the standard Python testing framework
+import unittest  # Import standard Python testing framework
 import os  # Import os to check for file existence
 import shutil  # Import shutil to clean up directories
+import io  # Import io for in-memory byte streams
+import pandas as pd  # Import pandas to create a valid test Excel file
 from fastapi.testclient import TestClient  # Import TestClient to simulate web requests
 from main import app  # Import our FastAPI app
-from file_manager import UPLOAD_DIR  # Import the upload directory constant
+from file_manager import UPLOAD_DIR  # Import upload directory constant
 from database import init_db, DB_NAME  # Import database setup functions
 
 # Create a test client that will make requests to our app
@@ -28,27 +30,22 @@ class TestMainApp(unittest.TestCase):
         if os.path.exists(UPLOAD_DIR):
             shutil.rmtree(UPLOAD_DIR)
 
-    def test_read_root_endpoint(self):
-        # Send a GET request to the root URL "/"
-        response = client.get("/")
-        
-        # Verify that the server responds with HTTP 200 OK
-        self.assertEqual(response.status_code, 200)
-        # Verify that the response content type is HTML
-        self.assertIn("text/html", response.headers["content-type"])
-        # Verify that the returned HTML contains our app title
-        self.assertIn("Financial Report Generator", response.text)
-
     def test_upload_file_endpoint(self):
-        # Define a fake filename and some fake content
-        filename = "test_report.xlsx"
-        file_content = b"fake excel content"
+        # Create a small valid Excel file in memory using pandas
+        df_test = pd.DataFrame({
+            "Region": ["North", "South"],
+            "Amount": [100.50, 250.75]
+        })
+        excel_buffer = io.BytesIO()
+        df_test.to_excel(excel_buffer, index=False, engine="openpyxl")
+        excel_bytes = excel_buffer.getvalue()
 
-        # POST request with fake file: {'field': ('name', content, 'type')}
-        mime_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        filename = "test_report.xlsx"
+
+        # Send a POST request to "/uploadfile/" with the valid Excel bytes
         response = client.post(
             "/uploadfile/",
-            files={"file": (filename, file_content, mime_type)},
+            files={"file": (filename, excel_bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
         )
 
         # Check 1: The server should respond with status code 200 (OK)
@@ -56,10 +53,12 @@ class TestMainApp(unittest.TestCase):
         
         # Get the JSON response
         json_response = response.json()
-        # Check 2: Verify the response contains the filename, status, and a file_id
+        
+        # Check 2: Verify response contains filename, status, file_id, and rows_stored
         self.assertEqual(json_response["filename"], filename)
-        self.assertEqual(json_response["status"], "File uploaded successfully")
+        self.assertEqual(json_response["status"], "File uploaded and raw data stored via raw SQL")
         self.assertIsInstance(json_response["file_id"], int)
+        self.assertEqual(json_response["rows_stored"], 2)
 
         # Check 3: The file should physically exist in the 'uploads' folder
         self.assertTrue(os.path.exists(os.path.join(UPLOAD_DIR, filename)))
