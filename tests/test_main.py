@@ -2,6 +2,7 @@ import unittest  # Import standard Python testing framework
 import os  # Import os to check for file existence
 import shutil  # Import shutil to clean up directories
 import io  # Import io for in-memory byte streams
+from typing import Optional
 import pandas as pd  # Import pandas to create a valid test Excel file
 from fastapi.testclient import TestClient  # Import TestClient to simulate web requests
 from main import app  # Import our FastAPI app
@@ -9,11 +10,11 @@ from file_manager import UPLOAD_DIR  # Import upload directory constant
 from database import init_db, DB_NAME  # Import database setup functions
 
 # Create a test client that will make requests to our app
-client = TestClient(app)
+client: TestClient = TestClient(app)
 
 class TestMainApp(unittest.TestCase):
 
-    def setUp(self):
+    def setUp(self) -> None:
         # Initialize the database to ensure tables exist
         if os.path.exists(DB_NAME):
             os.remove(DB_NAME)
@@ -22,7 +23,7 @@ class TestMainApp(unittest.TestCase):
         if os.path.exists(UPLOAD_DIR):
             shutil.rmtree(UPLOAD_DIR)
 
-    def tearDown(self):
+    def tearDown(self) -> None:
         # Clean up the database file
         if os.path.exists(DB_NAME):
             os.remove(DB_NAME)
@@ -30,17 +31,17 @@ class TestMainApp(unittest.TestCase):
         if os.path.exists(UPLOAD_DIR):
             shutil.rmtree(UPLOAD_DIR)
 
-    def test_upload_file_endpoint(self):
+    def test_upload_file_endpoint(self) -> None:
         # Create a small valid Excel file in memory using pandas
-        df_test = pd.DataFrame({
+        df_test: pd.DataFrame = pd.DataFrame({
             "Region": ["North", "South"],
             "Amount": [100.50, 250.75]
         })
-        excel_buffer = io.BytesIO()
+        excel_buffer: io.BytesIO = io.BytesIO()
         df_test.to_excel(excel_buffer, index=False, engine="openpyxl")
-        excel_bytes = excel_buffer.getvalue()
+        excel_bytes: bytes = excel_buffer.getvalue()
 
-        filename = "test_report.xlsx"
+        filename: str = "test_report.xlsx"
 
         # Send a POST request to "/uploadfile/" with the valid Excel bytes
         response = client.post(
@@ -52,7 +53,7 @@ class TestMainApp(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         
         # Get the JSON response
-        json_response = response.json()
+        json_response: dict = response.json()
         
         # Check 2: Verify response contains filename, status, file_id, and rows_stored
         self.assertEqual(json_response["filename"], filename)
