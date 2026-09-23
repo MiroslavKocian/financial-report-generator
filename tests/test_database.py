@@ -1,18 +1,19 @@
-import unittest
 import os
 import sqlite3
-from typing import Optional, Dict, Any
+import unittest
+from typing import Any
+
 from database import (
-    init_db, 
-    save_upload_metadata, 
-    insert_generic_row, 
-    get_db_connection, 
-    DB_NAME
+    DB_NAME,
+    get_db_connection,
+    init_db,
+    insert_generic_row,
+    save_upload_metadata,
 )
+
 
 # Define a test class inheriting from unittest.TestCase
 class TestDatabase(unittest.TestCase):
-
     def setUp(self) -> None:
         # Run this before every test: ensure a fresh start
         if os.path.exists(DB_NAME):
@@ -30,7 +31,7 @@ class TestDatabase(unittest.TestCase):
     def test_save_upload_metadata(self) -> None:
         # Call the function with a sample filename
         file_id: int = save_upload_metadata("test_file.xlsx")
-        
+
         # Verify that we got a valid integer ID back
         self.assertIsInstance(file_id, int)
         # Verify that the ID is greater than 0 (database IDs usually start at 1)
@@ -47,7 +48,7 @@ class TestDatabase(unittest.TestCase):
         conn: sqlite3.Connection = get_db_connection()
         cursor: sqlite3.Cursor = conn.cursor()
         cursor.execute("SELECT filename FROM uploads WHERE id = ?", (file_id,))
-        row: Optional[sqlite3.Row] = cursor.fetchone()
+        row: sqlite3.Row | None = cursor.fetchone()
         conn.close()
 
         # Verify that a row was found and the filename matches
@@ -56,7 +57,7 @@ class TestDatabase(unittest.TestCase):
 
     def test_insert_generic_row(self) -> None:
         """
-        Test inserting a generic row into a dynamically created table 
+        Test inserting a generic row into a dynamically created table
         using raw SQL queries, ensuring correct ID return and data persistence.
         """
         # Step 1: Create a temporary test table using raw SQL
@@ -73,10 +74,10 @@ class TestDatabase(unittest.TestCase):
         conn.close()
 
         # Step 2: Prepare sample row data dictionary
-        sample_data: Dict[str, Any] = {
+        sample_data: dict[str, Any] = {
             "product_name": "Laptop Pro",
             "price": 1299.99,
-            "in_stock": 15
+            "in_stock": 15,
         }
 
         # Step 3: Call the function we are testing
@@ -90,10 +91,10 @@ class TestDatabase(unittest.TestCase):
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT product_name, price, in_stock FROM test_products WHERE id = ?", 
-            (row_id,)
+            "SELECT product_name, price, in_stock FROM test_products WHERE id = ?",
+            (row_id,),
         )
-        row: Optional[sqlite3.Row] = cursor.fetchone()
+        row: sqlite3.Row | None = cursor.fetchone()
         conn.close()
 
         # Step 6: Assert that fetched values match what was inserted
@@ -102,5 +103,6 @@ class TestDatabase(unittest.TestCase):
         self.assertEqual(row["price"], 1299.99)
         self.assertEqual(row["in_stock"], 15)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main()
