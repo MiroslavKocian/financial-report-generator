@@ -14,20 +14,4 @@ exclude_lines = [
     "pragma: no cover",
     "if __name__ == .__main__.:",
     "async def lifespan",
-][tool.ruff]
-line-length = 88
-
-[tool.ruff.lint]
-select = ["E501"]
-
-[tool.pytest.ini_options]
-minversion = "7.0"
-addopts = "--cov=database --cov=file_manager --cov=main --cov-report=term-missing --cov-report=html"
-testpaths = ["tests"]
-
-[tool.coverage.report]
-exclude_lines = [
-    "pragma: no cover",
-    "if __name__ == .__main__.:",
-    "async def lifespan",
 ]
