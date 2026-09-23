@@ -1,6 +1,6 @@
-from io import BytesIO
 import os
 import shutil
+from io import BytesIO
 from types import SimpleNamespace
 
 import pytest
