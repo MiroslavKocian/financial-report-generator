@@ -4,6 +4,7 @@ import os
 import shutil
 from io import BytesIO
 from types import SimpleNamespace
+from unittest.mock import mock_open, patch
 
 import pytest
 
@@ -50,3 +51,18 @@ def test_save_uploaded_file_requires_filename() -> None:
 
     with pytest.raises(ValueError, match="filename"):
         save_uploaded_file(fake_file)
+
+
+def test_save_uploaded_file_wraps_oserror() -> None:
+    fake_file: SimpleNamespace = SimpleNamespace(
+        filename="broken.xlsx",
+        file=BytesIO(b"data"),
+    )
+
+    with patch(
+        "builtins.open",
+        mock_open(),
+    ) as mocked_open:
+        mocked_open.side_effect = OSError("disk full")
+        with pytest.raises(OSError, match="Failed to save upload"):
+            save_uploaded_file(fake_file)

@@ -1,6 +1,7 @@
 """Tests for Excel loading and column normalization."""
 
 from pathlib import Path
+from unittest.mock import patch
 
 import pandas as pd
 import pytest
@@ -30,3 +31,26 @@ def test_load_excel_dataframe_rejects_non_excel(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="Invalid Excel file format"):
         load_excel_dataframe(bad_file)
+
+
+def test_load_excel_dataframe_rejects_empty_columns() -> None:
+    empty_frame: pd.DataFrame = pd.DataFrame()
+    with patch(
+        "excel_loader.pd.read_excel",
+        return_value=empty_frame,
+    ):
+        with pytest.raises(ValueError, match="no columns"):
+            load_excel_dataframe("ignored.xlsx")
+
+
+def test_load_excel_dataframe_rejects_duplicate_columns() -> None:
+    duplicate_frame: pd.DataFrame = pd.DataFrame(
+        [[1, 2]],
+        columns=["Amount", "amount"],
+    )
+    with patch(
+        "excel_loader.pd.read_excel",
+        return_value=duplicate_frame,
+    ):
+        with pytest.raises(ValueError, match="duplicate column"):
+            load_excel_dataframe("ignored.xlsx")

@@ -3,6 +3,7 @@
 import os
 import sqlite3
 from typing import Any
+from unittest.mock import MagicMock, patch
 
 import pandas as pd
 import pytest
@@ -131,3 +132,55 @@ def test_store_dataframe_rows() -> None:
     assert row["region"] == "North"
     assert row["amount"] == "10.5" or row["amount"] == 10.5
     assert row["upload_id"] == upload_id
+
+
+def test_ensure_dynamic_sales_table_accepts_matching_schema() -> None:
+    ensure_dynamic_sales_table(["region", "amount"])
+    # Second call with the same columns should succeed (early return).
+    ensure_dynamic_sales_table(["region", "amount"])
+
+
+def test_insert_generic_row_rejects_empty_data() -> None:
+    with pytest.raises(ValueError, match="row_data must not be empty"):
+        insert_generic_row("uploads", {})
+
+
+def test_insert_generic_row_wraps_sqlite_error() -> None:
+    with pytest.raises(RuntimeError, match="Failed to insert"):
+        insert_generic_row(
+            "uploads",
+            {"missing_column": "value"},
+        )
+
+
+def test_save_upload_metadata_raises_when_lastrowid_missing() -> None:
+    mock_cursor = MagicMock()
+    mock_cursor.lastrowid = None
+    mock_conn = MagicMock()
+    mock_conn.cursor.return_value = mock_cursor
+    mock_conn.__enter__.return_value = mock_conn
+    mock_conn.__exit__.return_value = False
+
+    with patch(
+        "database.get_db_connection",
+        return_value=mock_conn,
+    ):
+        with pytest.raises(RuntimeError, match="upload id"):
+            save_upload_metadata("orphan.xlsx")
+
+
+def test_insert_generic_row_raises_when_lastrowid_missing() -> None:
+    mock_cursor = MagicMock()
+    mock_cursor.lastrowid = None
+    mock_conn = MagicMock()
+    mock_conn.cursor.return_value = mock_cursor
+
+    with patch(
+        "database.get_db_connection",
+        return_value=mock_conn,
+    ):
+        with pytest.raises(RuntimeError, match="row id"):
+            insert_generic_row(
+                "uploads",
+                {"filename": "x.xlsx"},
+            )
