@@ -4,6 +4,7 @@ import gc
 import io
 import os
 import shutil
+import sqlite3
 import time
 from unittest.mock import patch
 
@@ -11,7 +12,7 @@ import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
-from database import DB_NAME, init_db
+from database import DB_NAME, DYNAMIC_SALES_TABLE, init_db
 from file_manager import UPLOAD_DIR
 from main import app
 
@@ -29,6 +30,12 @@ def _remove_db_file() -> None:
             return
         except PermissionError:
             time.sleep(0.05)
+
+
+def _excel_bytes(dataframe: pd.DataFrame) -> bytes:
+    buffer: io.BytesIO = io.BytesIO()
+    dataframe.to_excel(buffer, index=False, engine="openpyxl")
+    return buffer.getvalue()
 
 
 @pytest.fixture(autouse=True)
@@ -51,13 +58,15 @@ def test_read_root_endpoint() -> None:
 
 
 def test_upload_file_endpoint() -> None:
-    df_test: pd.DataFrame = pd.DataFrame(
-        {"Region": ["North", "South"], "Amount": [100.50, 250.75]}
+    """Happy path: disk file + uploads row + dynamic_sales_data rows."""
+    excel_bytes: bytes = _excel_bytes(
+        pd.DataFrame(
+            {
+                "Region": ["North", "South"],
+                "Amount": [100.50, 250.75],
+            }
+        )
     )
-    excel_buffer: io.BytesIO = io.BytesIO()
-    df_test.to_excel(excel_buffer, index=False, engine="openpyxl")
-    excel_bytes: bytes = excel_buffer.getvalue()
-
     filename: str = "test_report.xlsx"
 
     response = client.post(
@@ -73,7 +82,6 @@ def test_upload_file_endpoint() -> None:
     )
 
     assert response.status_code == 200
-
     json_response: dict = response.json()
     assert json_response["filename"] == filename
     assert json_response["status"] == (
@@ -82,6 +90,28 @@ def test_upload_file_endpoint() -> None:
     assert isinstance(json_response["file_id"], int)
     assert json_response["rows_stored"] == 2
     assert os.path.exists(os.path.join(UPLOAD_DIR, filename))
+
+    # End-to-end proof that raw SQL storage wrote the Excel rows.
+    conn: sqlite3.Connection = sqlite3.connect(DB_NAME)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT filename FROM uploads WHERE id = ?",
+        (json_response["file_id"],),
+    )
+    upload_row = cursor.fetchone()
+    cursor.execute(
+        f"SELECT region, amount, upload_id FROM {DYNAMIC_SALES_TABLE} "
+        "ORDER BY id"
+    )
+    data_rows = cursor.fetchall()
+    conn.close()
+
+    assert upload_row is not None
+    assert upload_row["filename"] == filename
+    assert len(data_rows) == 2
+    assert data_rows[0]["region"] == "North"
+    assert data_rows[0]["upload_id"] == json_response["file_id"]
 
 
 def test_upload_invalid_file_format() -> None:
@@ -92,6 +122,35 @@ def test_upload_invalid_file_format() -> None:
     )
     assert response.status_code == 400
     assert "Invalid Excel file format" in response.json()["detail"]
+    # Failed parse must not leave an orphaned file in uploads/.
+    assert not os.path.exists(os.path.join(UPLOAD_DIR, "invalid.txt"))
+
+
+def test_upload_rejects_duplicate_filename() -> None:
+    excel_bytes: bytes = _excel_bytes(
+        pd.DataFrame({"Region": ["North"], "Amount": [1.0]})
+    )
+    files = {
+        "file": (
+            "same.xlsx",
+            excel_bytes,
+            "application/vnd.openxmlformats-officedocument."
+            "spreadsheetml.sheet",
+        )
+    }
+    assert client.post("/uploadfile/", files=files).status_code == 200
+    # Rebuild file tuple because the stream was consumed.
+    files = {
+        "file": (
+            "same.xlsx",
+            excel_bytes,
+            "application/vnd.openxmlformats-officedocument."
+            "spreadsheetml.sheet",
+        )
+    }
+    second = client.post("/uploadfile/", files=files)
+    assert second.status_code == 400
+    assert "already exists" in second.json()["detail"]
 
 
 def test_upload_save_value_error_returns_400() -> None:
@@ -121,12 +180,9 @@ def test_upload_save_oserror_returns_500() -> None:
 
 
 def test_upload_store_runtime_error_returns_500() -> None:
-    df_test: pd.DataFrame = pd.DataFrame(
-        {"Region": ["North"], "Amount": [1.0]}
+    excel_bytes: bytes = _excel_bytes(
+        pd.DataFrame({"Region": ["North"], "Amount": [1.0]})
     )
-    excel_buffer: io.BytesIO = io.BytesIO()
-    df_test.to_excel(excel_buffer, index=False, engine="openpyxl")
-    excel_bytes: bytes = excel_buffer.getvalue()
 
     with patch(
         "main.store_dataframe_rows",
@@ -145,3 +201,39 @@ def test_upload_store_runtime_error_returns_500() -> None:
         )
     assert response.status_code == 500
     assert "insert failed" in response.json()["detail"]
+    assert not os.path.exists(os.path.join(UPLOAD_DIR, "ok.xlsx"))
+
+
+def test_upload_schema_mismatch_cleans_metadata() -> None:
+    """Second workbook with different columns fails and rolls back."""
+    first = _excel_bytes(
+        pd.DataFrame({"Region": ["North"], "Amount": [1.0]})
+    )
+    second = _excel_bytes(
+        pd.DataFrame({"Region": ["North"], "Amount": [1.0], "Extra": [9]})
+    )
+    mime = (
+        "application/vnd.openxmlformats-officedocument."
+        "spreadsheetml.sheet"
+    )
+    assert (
+        client.post(
+            "/uploadfile/",
+            files={"file": ("a.xlsx", first, mime)},
+        ).status_code
+        == 200
+    )
+    response = client.post(
+        "/uploadfile/",
+        files={"file": ("b.xlsx", second, mime)},
+    )
+    assert response.status_code == 400
+    assert "do not match" in response.json()["detail"]
+    assert not os.path.exists(os.path.join(UPLOAD_DIR, "b.xlsx"))
+
+    conn: sqlite3.Connection = sqlite3.connect(DB_NAME)
+    count = conn.execute(
+        "SELECT COUNT(*) FROM uploads WHERE filename = 'b.xlsx'"
+    ).fetchone()[0]
+    conn.close()
+    assert count == 0

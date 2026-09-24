@@ -8,7 +8,13 @@ from unittest.mock import mock_open, patch
 
 import pytest
 
-from file_manager import UPLOAD_DIR, save_uploaded_file, setup_upload_dir
+from file_manager import (
+    UPLOAD_DIR,
+    delete_uploaded_file,
+    sanitize_filename,
+    save_uploaded_file,
+    setup_upload_dir,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -28,6 +34,18 @@ def test_create_upload_dir() -> None:
 
     assert result == UPLOAD_DIR
     assert os.path.exists(UPLOAD_DIR)
+
+
+def test_sanitize_filename_strips_path_traversal() -> None:
+    assert sanitize_filename("../../secret.xlsx") == "secret.xlsx"
+    assert sanitize_filename(r"..\..\secret.xlsx") == "secret.xlsx"
+
+
+def test_sanitize_filename_rejects_empty() -> None:
+    with pytest.raises(ValueError, match="filename"):
+        sanitize_filename("")
+    with pytest.raises(ValueError, match="filename"):
+        sanitize_filename(None)
 
 
 def test_save_uploaded_file() -> None:
@@ -53,6 +71,20 @@ def test_save_uploaded_file_requires_filename() -> None:
         save_uploaded_file(fake_file)
 
 
+def test_save_uploaded_file_rejects_overwrite() -> None:
+    first: SimpleNamespace = SimpleNamespace(
+        filename="dup.xlsx",
+        file=BytesIO(b"one"),
+    )
+    second: SimpleNamespace = SimpleNamespace(
+        filename="dup.xlsx",
+        file=BytesIO(b"two"),
+    )
+    save_uploaded_file(first)
+    with pytest.raises(ValueError, match="already exists"):
+        save_uploaded_file(second)
+
+
 def test_save_uploaded_file_wraps_oserror() -> None:
     fake_file: SimpleNamespace = SimpleNamespace(
         filename="broken.xlsx",
@@ -66,3 +98,17 @@ def test_save_uploaded_file_wraps_oserror() -> None:
         mocked_open.side_effect = OSError("disk full")
         with pytest.raises(OSError, match="Failed to save upload"):
             save_uploaded_file(fake_file)
+
+
+def test_sanitize_filename_rejects_dot_segments() -> None:
+    with pytest.raises(ValueError, match="filename"):
+        sanitize_filename("..")
+    with pytest.raises(ValueError, match="filename"):
+        sanitize_filename(".")
+
+
+def test_delete_uploaded_file_swallows_oserror() -> None:
+    with patch("os.path.exists", return_value=True):
+        with patch("os.remove", side_effect=OSError("locked")):
+            # Must not raise — cleanup is best-effort.
+            delete_uploaded_file("uploads/locked.xlsx")

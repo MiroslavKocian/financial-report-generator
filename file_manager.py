@@ -1,4 +1,8 @@
-"""Disk storage for uploaded Excel files."""
+"""Disk storage for uploaded Excel files.
+
+Interview note: never trust client-provided filenames. A value like
+"../../secret.xlsx" must not escape the uploads directory.
+"""
 
 import os
 import shutil
@@ -15,19 +19,43 @@ def setup_upload_dir() -> str:
     return UPLOAD_DIR
 
 
-def save_uploaded_file(upload_file: UploadFile) -> str:
+def sanitize_filename(filename: str | None) -> str:
     """
-    Save an UploadFile to UPLOAD_DIR.
+    Keep only the final path segment and reject empty/unsafe names.
 
-    Raises:
-        ValueError: If the upload has no filename.
-        OSError: If the file cannot be written to disk.
+    os.path.basename strips directory components on Windows and Unix,
+    which blocks classic path-traversal uploads.
     """
-    if not upload_file.filename:
+    if not filename or not filename.strip():
         raise ValueError("Uploaded file must have a filename.")
 
+    # Normalize separators, then keep the last segment only.
+    normalized: str = filename.strip().replace("\\", "/")
+    safe_name: str = os.path.basename(normalized)
+
+    if not safe_name or safe_name in {".", ".."}:
+        raise ValueError("Uploaded file must have a filename.")
+
+    return safe_name
+
+
+def save_uploaded_file(upload_file: UploadFile) -> str:
+    """
+    Save an UploadFile into UPLOAD_DIR under a sanitized filename.
+
+    Raises:
+        ValueError: Missing/unsafe filename, or file already exists.
+        OSError: Disk write failure.
+    """
+    safe_name: str = sanitize_filename(upload_file.filename)
     setup_upload_dir()
-    file_path: str = os.path.join(UPLOAD_DIR, upload_file.filename)
+    file_path: str = os.path.join(UPLOAD_DIR, safe_name)
+
+    # Fail fast instead of silently overwriting another upload.
+    if os.path.exists(file_path):
+        raise ValueError(
+            f"A file named {safe_name!r} already exists in uploads."
+        )
 
     try:
         with open(file_path, "wb") as buffer:
@@ -36,3 +64,13 @@ def save_uploaded_file(upload_file: UploadFile) -> str:
         raise OSError(f"Failed to save upload to {file_path}: {exc}") from exc
 
     return file_path
+
+
+def delete_uploaded_file(file_path: str) -> None:
+    """Best-effort cleanup when a later pipeline step fails."""
+    try:
+        if os.path.exists(file_path):
+            os.remove(file_path)
+    except OSError:
+        # Cleanup must not hide the original failure reason.
+        pass

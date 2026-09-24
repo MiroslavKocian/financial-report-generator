@@ -1,4 +1,8 @@
-"""SQLite access with hand-written raw SQL (no ORM)."""
+"""SQLite access with hand-written raw SQL (no ORM).
+
+Educational choice: every query is visible SQL so interviewers can see
+parameter binding (?) for values and identifier validation for names.
+"""
 
 import re
 import sqlite3
@@ -8,6 +12,8 @@ import pandas as pd
 
 DB_NAME: str = "sales_data.db"
 DYNAMIC_SALES_TABLE: str = "dynamic_sales_data"
+
+# Values can use ? placeholders; table/column names cannot — validate them.
 _IDENTIFIER_PATTERN: re.Pattern[str] = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
@@ -21,6 +27,7 @@ def validate_sql_identifier(name: str) -> str:
 def get_db_connection() -> sqlite3.Connection:
     """Open a SQLite connection with dict-like row access."""
     conn: sqlite3.Connection = sqlite3.connect(DB_NAME)
+    # Row lets callers use row["column"] instead of opaque tuples.
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -30,6 +37,7 @@ def init_db() -> None:
     conn: sqlite3.Connection = get_db_connection()
     try:
         with conn:
+            # uploads is the stable catalog of every Excel received.
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS uploads (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -42,7 +50,7 @@ def init_db() -> None:
 
 
 def save_upload_metadata(filename: str) -> int:
-    """Insert an uploads row and return its primary key."""
+    """Insert an uploads row and return its primary key (upload_id)."""
     if not filename:
         raise ValueError("filename is required.")
 
@@ -50,6 +58,7 @@ def save_upload_metadata(filename: str) -> int:
     try:
         with conn:
             cursor: sqlite3.Cursor = conn.cursor()
+            # Parameterized value — never concatenate user text into SQL.
             cursor.execute(
                 "INSERT INTO uploads (filename) VALUES (?)",
                 (filename,),
@@ -64,6 +73,7 @@ def save_upload_metadata(filename: str) -> int:
 
 
 def _table_exists(conn: sqlite3.Connection, table_name: str) -> bool:
+    """True when sqlite_master lists the table (raw SQL introspection)."""
     cursor: sqlite3.Cursor = conn.execute(
         """
         SELECT 1 FROM sqlite_master
@@ -79,6 +89,7 @@ def _existing_data_columns(
     table_name: str,
 ) -> list[str]:
     """Return user data columns (exclude id and upload_id)."""
+    # PRAGMA cannot take ? placeholders for the table name; name is validated.
     cursor: sqlite3.Cursor = conn.execute(f"PRAGMA table_info({table_name})")
     columns: list[str] = [
         row["name"]
@@ -92,6 +103,10 @@ def ensure_dynamic_sales_table(column_names: list[str]) -> None:
     """
     Create dynamic_sales_data for the given columns, or fail if an
     existing table has a different schema.
+
+    Excel layouts vary per file. We create columns from headers once,
+    then reject mismatched later uploads instead of silently altering
+    production data.
     """
     safe_columns: list[str] = [
         validate_sql_identifier(name) for name in column_names
@@ -114,6 +129,7 @@ def ensure_dynamic_sales_table(column_names: list[str]) -> None:
             f"{column} TEXT" for column in safe_columns
         )
         with conn:
+            # Identifiers above were validated; values stay parameterized.
             conn.execute(f"""
                 CREATE TABLE {table_name} (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -127,7 +143,12 @@ def ensure_dynamic_sales_table(column_names: list[str]) -> None:
 
 
 def insert_generic_row(table_name: str, row_data: dict[str, Any]) -> int:
-    """Insert one row with a dynamic raw SQL INSERT."""
+    """
+    Insert one row with a dynamic raw SQL INSERT.
+
+    Column names come from Excel headers (validated). Cell values always
+    bind through ? placeholders to avoid SQL injection.
+    """
     safe_table: str = validate_sql_identifier(table_name)
     if not row_data:
         raise ValueError("row_data must not be empty.")
@@ -166,7 +187,8 @@ def insert_generic_row(table_name: str, row_data: dict[str, Any]) -> int:
 def store_dataframe_rows(upload_id: int, dataframe: pd.DataFrame) -> int:
     """
     Ensure the dynamic table matches the DataFrame, then insert all rows.
-    Returns the number of rows stored.
+
+    Returns the number of rows stored (useful for the API response).
     """
     column_names: list[str] = [str(col) for col in dataframe.columns]
     ensure_dynamic_sales_table(column_names)
@@ -174,6 +196,7 @@ def store_dataframe_rows(upload_id: int, dataframe: pd.DataFrame) -> int:
     inserted_count: int = 0
     for _, series in dataframe.iterrows():
         row_dict: dict[str, Any] = series.to_dict()
+        # upload_id links each sales row back to the uploads catalog.
         row_payload: dict[str, Any] = {
             **row_dict,
             "upload_id": upload_id,

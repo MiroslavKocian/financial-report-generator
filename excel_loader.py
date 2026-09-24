@@ -1,4 +1,8 @@
-"""Read and normalize Excel sales files with pandas."""
+"""Read and normalize Excel sales files with pandas.
+
+openpyxl reads .xlsx; column names are normalized so they can become
+SQLite identifiers in the next pipeline step.
+"""
 
 import zipfile
 from pathlib import Path
@@ -7,7 +11,11 @@ import pandas as pd
 
 
 def normalize_column_name(name: object) -> str:
-    """Turn a raw Excel header into a safe SQL-friendly identifier."""
+    """
+    Turn a raw Excel header into a SQL-friendly identifier.
+
+    Example: " Region Name " -> "region_name"
+    """
     return str(name).strip().lower().replace(" ", "_")
 
 
@@ -16,7 +24,8 @@ def load_excel_dataframe(file_path: str | Path) -> pd.DataFrame:
     Load an Excel file and return a DataFrame with normalized columns.
 
     Raises:
-        ValueError: If the file is not a readable Excel workbook.
+        ValueError: Unreadable workbook, no columns, or duplicate headers
+        after normalization (e.g. "Amount" and "amount" both become amount).
     """
     try:
         dataframe: pd.DataFrame = pd.read_excel(
@@ -31,6 +40,7 @@ def load_excel_dataframe(file_path: str | Path) -> pd.DataFrame:
         TypeError,
         zipfile.BadZipFile,
     ) as exc:
+        # Narrow catch: map library noise into one clear API error.
         raise ValueError(f"Invalid Excel file format: {exc}") from exc
 
     normalized_columns: list[str] = [
