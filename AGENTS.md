@@ -1,4 +1,4 @@
-# Coding Principles & Guidelines
+# AI agent guidance
 
 ## Design (OOP)
 * **Single responsibility** — A class or function should do one thing only.
