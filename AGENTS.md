@@ -31,7 +31,7 @@
 * **Version everything** — Code, config, infrastructure, data schemas.
 
 ## Mindset
-**Line length** — Maximum line length of 88 characters for all code files.
+**Line length** — Maximum line length of 88 characters for Python source files (`.py`).
 * **Code is read more than written** — Optimize for the reader, not the writer.
 * **Explicit over implicit** — Clarity beats cleverness.
 * **Embrace immutability** — Prefer data that doesn't change; it's easier to reason about.

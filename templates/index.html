@@ -1,40 +1,36 @@
-<!-- 
+<!--
   File: index.html
-  Description: Entry point interface for the Financial Report Generator.
-  Provides a user-friendly form to upload Excel sales files (.xlsx, .xls)
-  to the backend FastAPI service for parsing and analysis.
+  Description: Upload form for Excel sales files (.xlsx, .xls).
+  Submits to FastAPI /uploadfile/ for disk + SQLite storage.
 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <!-- Set character encoding to UTF-8 for universal character support -->
     <meta charset="UTF-8">
-    <!-- Ensure responsive scaling on mobile devices -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Financial Report Generator</title>
 </head>
 <body>
     <header>
         <h1>Financial Report Generator</h1>
-        <p>Upload your Excel sales report to begin analysis.</p>
+        <p>Upload an Excel sales file to store raw data in SQLite.</p>
     </header>
 
     <main>
-        <!-- HTML form sending a POST request to the /uploadfile/ endpoint -->
-        <!-- enctype="multipart/form-data" is required for binary file uploads -->
+        <!-- multipart/form-data is required for binary file uploads -->
         <form action="/uploadfile/" enctype="multipart/form-data" method="post">
-            <!-- Accessible label for the file input element -->
             <label for="file-upload">Select Excel File:</label>
-            
-            <!-- Input restricted to Excel spreadsheet formats (.xlsx, .xls) -->
-            <input id="file-upload" name="file" type="file" accept=".xlsx, .xls" required>
-            
-            <!-- Button to trigger form submission -->
-            <input type="submit" value="Upload and Analyze">
+            <input
+                id="file-upload"
+                name="file"
+                type="file"
+                accept=".xlsx, .xls"
+                required
+            >
+            <input type="submit" value="Upload and Store">
         </form>
     </main>
 
-    <!-- Semantic footer indicating app metadata -->
     <footer>
         <small>Financial Report Generator</small>
     </footer>

@@ -1,33 +1,38 @@
-import os  # Import the operating system module to interact with the file system
-import shutil  # Import shutil to handle file copying operations
+"""Disk storage for uploaded Excel files."""
 
-from fastapi import UploadFile  # Import UploadFile for type hinting
+import os
+import shutil
 
-# Define the constant name for our upload directory
+from fastapi import UploadFile
+
 UPLOAD_DIR: str = "uploads"
 
 
 def setup_upload_dir() -> str:
-    """Ensures the upload directory exists."""
-    # Check if the directory path specifically does NOT exist yet
+    """Create the upload directory if missing, then return its path."""
     if not os.path.exists(UPLOAD_DIR):
-        # Create the directory using the makedirs function
         os.makedirs(UPLOAD_DIR)
-    # Return the directory name so the caller knows where files go
     return UPLOAD_DIR
 
 
 def save_uploaded_file(upload_file: UploadFile) -> str:
-    """Saves an incoming FastAPI UploadFile to the uploads directory."""
-    # Ensure the destination directory exists
-    setup_upload_dir()
+    """
+    Save an UploadFile to UPLOAD_DIR.
 
-    # Construct the full destination file path
+    Raises:
+        ValueError: If the upload has no filename.
+        OSError: If the file cannot be written to disk.
+    """
+    if not upload_file.filename:
+        raise ValueError("Uploaded file must have a filename.")
+
+    setup_upload_dir()
     file_path: str = os.path.join(UPLOAD_DIR, upload_file.filename)
 
-    # Write the binary stream directly to disk
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(upload_file.file, buffer)
+    try:
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(upload_file.file, buffer)
+    except OSError as exc:
+        raise OSError(f"Failed to save upload to {file_path}: {exc}") from exc
 
-    # Return the target path
     return file_path

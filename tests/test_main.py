@@ -1,3 +1,5 @@
+"""Tests for FastAPI upload and home routes."""
+
 import io
 import os
 import shutil
@@ -15,7 +17,7 @@ client: TestClient = TestClient(app)
 
 @pytest.fixture(autouse=True)
 def clean_environment():
-    """Fixture to clean database and upload folder for each test."""
+    """Clean database and upload folder for each test."""
     if os.path.exists(DB_NAME):
         os.remove(DB_NAME)
     init_db()
@@ -29,9 +31,9 @@ def clean_environment():
 
 
 def test_read_root_endpoint() -> None:
-    """Test standard GET / route to cover HTML template response."""
     response = client.get("/")
     assert response.status_code == 200
+    assert "Upload and Store" in response.text
 
 
 def test_upload_file_endpoint() -> None:
@@ -50,7 +52,8 @@ def test_upload_file_endpoint() -> None:
             "file": (
                 filename,
                 excel_bytes,
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                "application/vnd.openxmlformats-officedocument."
+                "spreadsheetml.sheet",
             )
         },
     )
@@ -59,14 +62,15 @@ def test_upload_file_endpoint() -> None:
 
     json_response: dict = response.json()
     assert json_response["filename"] == filename
-    assert json_response["status"] == "File uploaded and raw data stored via raw SQL"
+    assert json_response["status"] == (
+        "File uploaded and raw data stored via raw SQL"
+    )
     assert isinstance(json_response["file_id"], int)
     assert json_response["rows_stored"] == 2
     assert os.path.exists(os.path.join(UPLOAD_DIR, filename))
 
 
 def test_upload_invalid_file_format() -> None:
-    """Test uploading a non-Excel file to cover the Exception block."""
     bad_bytes: bytes = b"This is just a plain text file, not Excel!"
     response = client.post(
         "/uploadfile/",
