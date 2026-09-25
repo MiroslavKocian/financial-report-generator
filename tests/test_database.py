@@ -11,6 +11,7 @@ import pytest
 from database import (
     DB_NAME,
     DYNAMIC_SALES_TABLE,
+    clear_stored_upload_data,
     ensure_dynamic_sales_table,
     get_db_connection,
     init_db,
@@ -138,6 +139,49 @@ def test_ensure_dynamic_sales_table_accepts_matching_schema() -> None:
     ensure_dynamic_sales_table(["region", "amount"])
     # Second call with the same columns should succeed (early return).
     ensure_dynamic_sales_table(["region", "amount"])
+
+
+def test_clear_stored_upload_data_drops_sales_and_uploads() -> None:
+    upload_id: int = save_upload_metadata("first.xlsx")
+    store_dataframe_rows(
+        upload_id,
+        pd.DataFrame({"region": ["North"], "amount": [1.0]}),
+    )
+
+    clear_stored_upload_data()
+
+    conn: sqlite3.Connection = get_db_connection()
+    uploads_count: int = conn.execute(
+        "SELECT COUNT(*) FROM uploads"
+    ).fetchone()[0]
+    table_row = conn.execute(
+        """
+        SELECT 1 FROM sqlite_master
+        WHERE type = 'table' AND name = ?
+        """,
+        (DYNAMIC_SALES_TABLE,),
+    ).fetchone()
+    conn.close()
+
+    assert uploads_count == 0
+    assert table_row is None
+
+
+def test_clear_stored_upload_data_allows_new_schema() -> None:
+    upload_id: int = save_upload_metadata("first.xlsx")
+    store_dataframe_rows(
+        upload_id,
+        pd.DataFrame({"region": ["North"], "amount": [1.0]}),
+    )
+    clear_stored_upload_data()
+
+    # After clear, a workbook with different columns may be stored.
+    new_id: int = save_upload_metadata("second.xlsx")
+    count: int = store_dataframe_rows(
+        new_id,
+        pd.DataFrame({"product": ["A"], "price": [9.5]}),
+    )
+    assert count == 1
 
 
 def test_insert_generic_row_rejects_empty_data() -> None:

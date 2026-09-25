@@ -72,6 +72,23 @@ def save_upload_metadata(filename: str) -> int:
     return new_id
 
 
+def clear_stored_upload_data() -> None:
+    """
+    Drop sales rows and the uploads catalog.
+
+    The app keeps one active dataset: a successful new upload replaces
+    whatever was stored before (possibly with different Excel columns).
+    """
+    table_name: str = validate_sql_identifier(DYNAMIC_SALES_TABLE)
+    conn: sqlite3.Connection = get_db_connection()
+    try:
+        with conn:
+            conn.execute(f"DROP TABLE IF EXISTS {table_name}")
+            conn.execute("DELETE FROM uploads")
+    finally:
+        conn.close()
+
+
 def _table_exists(conn: sqlite3.Connection, table_name: str) -> bool:
     """True when sqlite_master lists the table (raw SQL introspection)."""
     cursor: sqlite3.Cursor = conn.execute(
@@ -104,9 +121,9 @@ def ensure_dynamic_sales_table(column_names: list[str]) -> None:
     Create dynamic_sales_data for the given columns, or fail if an
     existing table has a different schema.
 
-    Excel layouts vary per file. We create columns from headers once,
-    then reject mismatched later uploads instead of silently altering
-    production data.
+    Normal flow clears the table before each successful upload, so a
+    new workbook may introduce different columns. This check remains a
+    safety net if clear was skipped.
     """
     safe_columns: list[str] = [
         validate_sql_identifier(name) for name in column_names

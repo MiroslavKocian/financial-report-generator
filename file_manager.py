@@ -74,3 +74,30 @@ def delete_uploaded_file(file_path: str) -> None:
     except OSError:
         # Cleanup must not hide the original failure reason.
         pass
+
+
+def clear_upload_dir(*, keep_path: str | None = None) -> None:
+    """
+    Remove every file in UPLOAD_DIR except an optional keep_path.
+
+    Used when a new valid Excel replaces the previous dataset so only
+    one file remains on disk.
+    """
+    if not os.path.exists(UPLOAD_DIR):
+        return
+
+    keep_abs: str | None = (
+        os.path.abspath(keep_path) if keep_path else None
+    )
+    for name in os.listdir(UPLOAD_DIR):
+        path: str = os.path.join(UPLOAD_DIR, name)
+        if not os.path.isfile(path):
+            continue
+        if keep_abs is not None and os.path.abspath(path) == keep_abs:
+            continue
+        try:
+            os.remove(path)
+        except OSError as exc:
+            raise OSError(
+                f"Failed to remove previous upload {path}: {exc}"
+            ) from exc

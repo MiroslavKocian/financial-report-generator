@@ -179,6 +179,37 @@ def test_upload_save_oserror_returns_500() -> None:
     assert "disk full" in response.json()["detail"]
 
 
+def test_upload_store_value_error_cleans_metadata() -> None:
+    """ValueError after metadata INSERT must delete the uploads row."""
+    excel_bytes: bytes = _excel_bytes(
+        pd.DataFrame({"Region": ["North"], "Amount": [1.0]})
+    )
+
+    with patch(
+        "main.store_dataframe_rows",
+        side_effect=ValueError("storage rejected"),
+    ):
+        response = client.post(
+            "/uploadfile/",
+            files={
+                "file": (
+                    "ok.xlsx",
+                    excel_bytes,
+                    "application/vnd.openxmlformats-officedocument."
+                    "spreadsheetml.sheet",
+                )
+            },
+        )
+    assert response.status_code == 400
+    assert "storage rejected" in response.json()["detail"]
+    assert not os.path.exists(os.path.join(UPLOAD_DIR, "ok.xlsx"))
+
+    conn: sqlite3.Connection = sqlite3.connect(DB_NAME)
+    count = conn.execute("SELECT COUNT(*) FROM uploads").fetchone()[0]
+    conn.close()
+    assert count == 0
+
+
 def test_upload_store_runtime_error_returns_500() -> None:
     excel_bytes: bytes = _excel_bytes(
         pd.DataFrame({"Region": ["North"], "Amount": [1.0]})
@@ -204,13 +235,62 @@ def test_upload_store_runtime_error_returns_500() -> None:
     assert not os.path.exists(os.path.join(UPLOAD_DIR, "ok.xlsx"))
 
 
-def test_upload_schema_mismatch_cleans_metadata() -> None:
-    """Second workbook with different columns fails and rolls back."""
+def test_upload_replaces_previous_dataset() -> None:
+    """A second valid file wipes prior disk file and DB rows."""
     first = _excel_bytes(
         pd.DataFrame({"Region": ["North"], "Amount": [1.0]})
     )
     second = _excel_bytes(
-        pd.DataFrame({"Region": ["North"], "Amount": [1.0], "Extra": [9]})
+        pd.DataFrame({"Region": ["South", "East"], "Amount": [2.0, 3.0]})
+    )
+    mime = (
+        "application/vnd.openxmlformats-officedocument."
+        "spreadsheetml.sheet"
+    )
+    assert (
+        client.post(
+            "/uploadfile/",
+            files={"file": ("a.xlsx", first, mime)},
+        ).status_code
+        == 200
+    )
+
+    response = client.post(
+        "/uploadfile/",
+        files={"file": ("b.xlsx", second, mime)},
+    )
+    assert response.status_code == 200
+    assert response.json()["rows_stored"] == 2
+    assert response.json()["filename"] == "b.xlsx"
+
+    assert not os.path.exists(os.path.join(UPLOAD_DIR, "a.xlsx"))
+    assert os.path.exists(os.path.join(UPLOAD_DIR, "b.xlsx"))
+
+    conn: sqlite3.Connection = sqlite3.connect(DB_NAME)
+    conn.row_factory = sqlite3.Row
+    upload_rows = conn.execute(
+        "SELECT filename FROM uploads ORDER BY id"
+    ).fetchall()
+    data_rows = conn.execute(
+        f"SELECT region, amount FROM {DYNAMIC_SALES_TABLE} "
+        "ORDER BY id"
+    ).fetchall()
+    conn.close()
+
+    assert len(upload_rows) == 1
+    assert upload_rows[0]["filename"] == "b.xlsx"
+    assert len(data_rows) == 2
+    assert data_rows[0]["region"] == "South"
+    assert data_rows[1]["region"] == "East"
+
+
+def test_upload_replaces_with_different_schema() -> None:
+    """Replace also allows a new workbook with different columns."""
+    first = _excel_bytes(
+        pd.DataFrame({"Region": ["North"], "Amount": [1.0]})
+    )
+    second = _excel_bytes(
+        pd.DataFrame({"Product": ["Widget"], "Price": [9.5]})
     )
     mime = (
         "application/vnd.openxmlformats-officedocument."
@@ -227,13 +307,58 @@ def test_upload_schema_mismatch_cleans_metadata() -> None:
         "/uploadfile/",
         files={"file": ("b.xlsx", second, mime)},
     )
-    assert response.status_code == 400
-    assert "do not match" in response.json()["detail"]
-    assert not os.path.exists(os.path.join(UPLOAD_DIR, "b.xlsx"))
+    assert response.status_code == 200
+    assert response.json()["rows_stored"] == 1
 
     conn: sqlite3.Connection = sqlite3.connect(DB_NAME)
-    count = conn.execute(
-        "SELECT COUNT(*) FROM uploads WHERE filename = 'b.xlsx'"
+    conn.row_factory = sqlite3.Row
+    row = conn.execute(
+        f"SELECT product, price FROM {DYNAMIC_SALES_TABLE}"
+    ).fetchone()
+    uploads_count = conn.execute(
+        "SELECT COUNT(*) FROM uploads"
     ).fetchone()[0]
     conn.close()
-    assert count == 0
+
+    assert uploads_count == 1
+    assert row is not None
+    assert row["product"] == "Widget"
+
+
+def test_upload_invalid_second_file_keeps_previous_data() -> None:
+    """A bad second upload must not wipe the first successful dataset."""
+    first = _excel_bytes(
+        pd.DataFrame({"Region": ["North"], "Amount": [1.0]})
+    )
+    mime = (
+        "application/vnd.openxmlformats-officedocument."
+        "spreadsheetml.sheet"
+    )
+    assert (
+        client.post(
+            "/uploadfile/",
+            files={"file": ("a.xlsx", first, mime)},
+        ).status_code
+        == 200
+    )
+
+    response = client.post(
+        "/uploadfile/",
+        files={"file": ("bad.txt", b"not-excel", "text/plain")},
+    )
+    assert response.status_code == 400
+    assert not os.path.exists(os.path.join(UPLOAD_DIR, "bad.txt"))
+    assert os.path.exists(os.path.join(UPLOAD_DIR, "a.xlsx"))
+
+    conn: sqlite3.Connection = sqlite3.connect(DB_NAME)
+    conn.row_factory = sqlite3.Row
+    uploads_count = conn.execute(
+        "SELECT COUNT(*) FROM uploads"
+    ).fetchone()[0]
+    data_count = conn.execute(
+        f"SELECT COUNT(*) FROM {DYNAMIC_SALES_TABLE}"
+    ).fetchone()[0]
+    conn.close()
+
+    assert uploads_count == 1
+    assert data_count == 1

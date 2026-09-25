@@ -1,9 +1,10 @@
 """FastAPI entrypoint: routes wire file, Excel, and SQLite modules.
 
 Pipeline for steps 1-2 (upload + store raw data):
-1) Persist the binary to disk under a sanitized name.
-2) Parse Excel with pandas (openpyxl).
-3) Record upload metadata and insert rows via raw SQL.
+1) Persist the binary to disk under a sanitized name (no same-name
+   overwrite).
+2) Parse Excel with pandas (openpyxl); on failure keep prior data.
+3) Replace previous dataset (other files + DB), then store the new one.
 If a later step fails, delete the saved file so uploads/ stays clean.
 """
 
@@ -15,13 +16,18 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
 from database import (
+    clear_stored_upload_data,
     get_db_connection,
     init_db,
     save_upload_metadata,
     store_dataframe_rows,
 )
 from excel_loader import load_excel_dataframe
-from file_manager import delete_uploaded_file, save_uploaded_file
+from file_manager import (
+    clear_upload_dir,
+    delete_uploaded_file,
+    save_uploaded_file,
+)
 
 
 def _delete_upload_metadata(upload_id: int) -> None:
@@ -61,8 +67,9 @@ def create_upload_file(file: UploadFile = File(...)) -> dict:  # noqa: B008
     """
     Accept an Excel upload and store raw rows in SQLite (steps 1-2).
 
-    Analysis / LLM / PDF export are intentional later steps — this
-    endpoint only persists data so downstream features have a source.
+    Only one dataset is active: a valid new file replaces prior disk
+    files and DB rows. The same filename is still rejected while that
+    file exists. Analysis / LLM / PDF export are later steps.
     """
     file_location: str | None = None
     file_id: int | None = None
@@ -70,10 +77,14 @@ def create_upload_file(file: UploadFile = File(...)) -> dict:  # noqa: B008
         # Step A: write bytes to disk (sanitized name, no overwrite).
         file_location = save_uploaded_file(file)
 
-        # Step B: parse before inserting DB rows so bad files fail early.
+        # Step B: parse before clearing so a bad file keeps prior data.
         dataframe = load_excel_dataframe(file_location)
 
-        # Step C: metadata first to obtain upload_id as a foreign key.
+        # Step C: one active dataset — drop previous files and DB rows.
+        clear_upload_dir(keep_path=file_location)
+        clear_stored_upload_data()
+
+        # Step D: metadata first to obtain upload_id as a foreign key.
         filename: str = os.path.basename(file_location)
         file_id = save_upload_metadata(filename)
         rows_stored: int = store_dataframe_rows(file_id, dataframe)
