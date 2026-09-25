@@ -9,29 +9,102 @@ import pandas as pd
 import pytest
 
 from database import (
-    DB_NAME,
     DYNAMIC_SALES_TABLE,
     clear_stored_upload_data,
     ensure_dynamic_sales_table,
     get_db_connection,
-    init_db,
     insert_generic_row,
     load_sales_dataframe,
+    replace_sales_dataset,
     save_upload_metadata,
     store_dataframe_rows,
     validate_sql_identifier,
 )
 
 
-@pytest.fixture(autouse=True)
-def clean_database():
-    """Ensure a clean database before and after each test."""
-    if os.path.exists(DB_NAME):
-        os.remove(DB_NAME)
-    init_db()
-    yield
-    if os.path.exists(DB_NAME):
-        os.remove(DB_NAME)
+def test_replace_sales_dataset_stores_rows() -> None:
+    stored = replace_sales_dataset(
+        "sales.xlsx",
+        pd.DataFrame({"region": ["North"], "amount": [10.5]}),
+    )
+    assert stored.upload_id > 0
+    assert stored.rows_stored == 1
+
+    loaded = load_sales_dataframe()
+    assert list(loaded.columns) == ["region", "amount"]
+    assert loaded.iloc[0]["region"] == "North"
+
+
+def test_replace_sales_dataset_rejects_empty_filename() -> None:
+    with pytest.raises(ValueError, match="filename"):
+        replace_sales_dataset("", pd.DataFrame({"amount": [1.0]}))
+
+
+def test_replace_sales_dataset_rejects_reserved_column() -> None:
+    with pytest.raises(ValueError, match="reserved"):
+        replace_sales_dataset(
+            "bad.xlsx",
+            pd.DataFrame({"id": [1], "amount": [1.0]}),
+        )
+
+
+def test_replace_sales_dataset_stores_sql_null_for_missing_cells() -> None:
+    replace_sales_dataset(
+        "na.xlsx",
+        pd.DataFrame({"amount": [1.0, pd.NA]}),
+    )
+    conn = get_db_connection()
+    rows = conn.execute(
+        f"SELECT amount FROM {DYNAMIC_SALES_TABLE} ORDER BY id"
+    ).fetchall()
+    conn.close()
+    assert rows[0]["amount"] == "1.0"
+    assert rows[1]["amount"] is None
+
+
+def test_replace_sales_dataset_raises_when_upload_id_missing() -> None:
+    mock_cursor = MagicMock()
+    mock_cursor.lastrowid = None
+    mock_conn = MagicMock()
+    mock_conn.execute.return_value = mock_cursor
+
+    with patch("database.get_db_connection", return_value=mock_conn):
+        with pytest.raises(RuntimeError, match="upload id"):
+            replace_sales_dataset("orphan.xlsx", pd.DataFrame({"amount": [1.0]}))
+
+
+def test_replace_sales_dataset_rolls_back_on_sqlite_error(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    replace_sales_dataset(
+        "first.xlsx",
+        pd.DataFrame({"amount": [1.0]}),
+    )
+    inner: sqlite3.Connection = get_db_connection()
+
+    class _FailingConnection:
+        """Delegate to SQLite except executemany, which fails."""
+
+        def executemany(self, *args: Any, **kwargs: Any) -> None:
+            raise sqlite3.OperationalError("disk")
+
+        def __getattr__(self, name: str) -> Any:
+            return getattr(inner, name)
+
+    with patch(
+        "database.get_db_connection",
+        return_value=_FailingConnection(),
+    ):
+        with caplog.at_level("ERROR"):
+            with pytest.raises(RuntimeError, match="Failed to replace sales dataset"):
+                replace_sales_dataset(
+                    "second.xlsx",
+                    pd.DataFrame({"amount": [2.0, 3.0]}),
+                )
+
+    assert "disk" in caplog.text
+    loaded = load_sales_dataframe()
+    assert loaded.iloc[0]["amount"] in {"1.0", "1"}
 
 
 def test_save_upload_metadata() -> None:

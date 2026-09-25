@@ -5,30 +5,53 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Financial Report Generator</title>
+    <style>
+        :root {
+            color-scheme: light dark;
+            font-family: system-ui, sans-serif;
+            line-height: 1.5;
+        }
+        body {
+            margin: 0 auto;
+            max-width: 40rem;
+            padding: 1.5rem;
+        }
+        header, main, footer {
+            margin-bottom: 1.5rem;
+        }
+        form {
+            display: grid;
+            gap: 0.75rem;
+        }
+        input[type="submit"] {
+            width: fit-content;
+            padding: 0.5rem 1rem;
+        }
+    </style>
 </head>
 <body>
     <header>
         <h1>Financial Report Generator</h1>
         <p>
-            Upload one Excel file with an amount column. The summary shows
-            total, minimum, and maximum amount.
+            Upload one <code>.xlsx</code> file with an <code>amount</code> column.
+            The summary report shows total, minimum, and maximum amount.
         </p>
     </header>
 
     <main>
-        <!-- multipart/form-data is required for binary file uploads -->
         <form action="/uploadfile/" enctype="multipart/form-data" method="post">
-            <label for="file-upload">Select Excel File:</label>
+            <label for="file-upload">Select Excel file</label>
             <input
                 id="file-upload"
                 name="file"
                 type="file"
-                accept=".xlsx, .xls"
+                accept=".xlsx"
                 required
             >
             <input type="submit" value="Upload and Store">
         </form>
         <p><a href="/summary">View summary report</a></p>
+        <p><a href="/docs">Open API docs</a></p>
     </main>
 
     <footer>

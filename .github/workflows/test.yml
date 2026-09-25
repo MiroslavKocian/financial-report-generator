@@ -6,8 +6,11 @@ on:
       - "**"
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
-  pytest:
+  quality:
     runs-on: ubuntu-latest
 
     steps:
@@ -22,6 +25,11 @@ jobs:
 
       - name: Install dependencies
         run: pip install -r requirements.txt
+
+      - name: Lint with Ruff
+        run: |
+          ruff check .
+          ruff format --check .
 
       - name: Run tests with coverage
         run: pytest

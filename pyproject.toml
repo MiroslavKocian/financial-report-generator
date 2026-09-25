@@ -6,12 +6,11 @@ select = ["E501"]
 
 [tool.pytest.ini_options]
 minversion = "7.0"
-addopts = "--cov=database --cov=file_manager --cov=excel_loader --cov=analysis --cov=main --cov-report=term-missing --cov-report=html"
+addopts = "--cov=database --cov=file_manager --cov=excel_loader --cov=analysis --cov=main --cov=schemas --cov-report=term-missing --cov-fail-under=100"
 testpaths = ["tests"]
 
 [tool.coverage.report]
 exclude_lines = [
     "pragma: no cover",
     "if __name__ == .__main__.:",
-    "async def lifespan",
 ]

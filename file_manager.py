@@ -2,6 +2,7 @@
 
 import os
 import shutil
+import tempfile
 
 from fastapi import UploadFile
 
@@ -19,13 +20,11 @@ def sanitize_filename(filename: str | None) -> str:
     """
     Keep only the final path segment and reject empty/unsafe names.
 
-    os.path.basename strips directory components on Windows and Unix,
-    which blocks classic path-traversal uploads.
+    os.path.basename blocks classic path-traversal uploads.
     """
     if not filename or not filename.strip():
         raise ValueError("Uploaded file must have a filename.")
 
-    # Normalize separators, then keep the last segment only.
     normalized: str = filename.strip().replace("\\", "/")
     safe_name: str = os.path.basename(normalized)
 
@@ -35,27 +34,37 @@ def sanitize_filename(filename: str | None) -> str:
     return safe_name
 
 
-def save_uploaded_file(upload_file: UploadFile) -> str:
+def save_temporary_upload(upload_file: UploadFile) -> str:
     """
-    Save an UploadFile into UPLOAD_DIR under a sanitized filename.
+    Write upload bytes to a temporary file inside UPLOAD_DIR.
 
-    Raises:
-        ValueError: Missing/unsafe filename.
-        OSError: Disk write failure.
-
-    An existing file with the same sanitized name is replaced.
+    The final filename is applied only after the database update succeeds.
     """
-    safe_name: str = sanitize_filename(upload_file.filename)
     setup_upload_dir()
-    file_path: str = os.path.join(UPLOAD_DIR, safe_name)
-
+    file_descriptor: int
+    temp_path: str
+    file_descriptor, temp_path = tempfile.mkstemp(
+        suffix=".part",
+        dir=UPLOAD_DIR,
+    )
     try:
-        with open(file_path, "wb") as buffer:
+        with os.fdopen(file_descriptor, "wb") as buffer:
             shutil.copyfileobj(upload_file.file, buffer)
     except OSError as exc:
-        raise OSError(f"Failed to save upload to {file_path}: {exc}") from exc
+        delete_uploaded_file(temp_path)
+        raise OSError(f"Failed to save upload to {temp_path}: {exc}") from exc
+    return temp_path
 
-    return file_path
+
+def publish_upload(temp_path: str, safe_name: str) -> str:
+    """Move the temp file to its final name and remove older uploads."""
+    final_path: str = os.path.join(UPLOAD_DIR, safe_name)
+    try:
+        os.replace(temp_path, final_path)
+    except OSError as exc:
+        raise OSError(f"Failed to publish upload to {final_path}: {exc}") from exc
+    clear_upload_dir(keep_path=final_path)
+    return final_path
 
 
 def delete_uploaded_file(file_path: str) -> None:
@@ -64,17 +73,11 @@ def delete_uploaded_file(file_path: str) -> None:
         if os.path.exists(file_path):
             os.remove(file_path)
     except OSError:
-        # Cleanup must not hide the original failure reason.
         pass
 
 
 def clear_upload_dir(*, keep_path: str | None = None) -> None:
-    """
-    Remove every file in UPLOAD_DIR except an optional keep_path.
-
-    Used when a new valid Excel replaces the previous dataset so only
-    one file remains on disk.
-    """
+    """Remove every file in UPLOAD_DIR except an optional keep_path."""
     if not os.path.exists(UPLOAD_DIR):
         return
 

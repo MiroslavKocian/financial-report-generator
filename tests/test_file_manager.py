@@ -1,7 +1,6 @@
 """Tests for file_manager disk helpers."""
 
 import os
-import shutil
 from io import BytesIO
 from types import SimpleNamespace
 from unittest.mock import mock_open, patch
@@ -12,29 +11,22 @@ from file_manager import (
     UPLOAD_DIR,
     clear_upload_dir,
     delete_uploaded_file,
+    publish_upload,
     sanitize_filename,
-    save_uploaded_file,
+    save_temporary_upload,
     setup_upload_dir,
 )
 
 
-@pytest.fixture(autouse=True)
-def clean_upload_dir():
-    """Reset the upload directory before and after each test."""
-    if os.path.exists(UPLOAD_DIR):
-        shutil.rmtree(UPLOAD_DIR)
-    yield
-    if os.path.exists(UPLOAD_DIR):
-        shutil.rmtree(UPLOAD_DIR)
-
-
-def test_create_upload_dir() -> None:
-    assert not os.path.exists(UPLOAD_DIR)
+def test_create_upload_dir(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    fresh_dir = tmp_path / "new_uploads"
+    monkeypatch.setattr("file_manager.UPLOAD_DIR", str(fresh_dir))
+    assert not fresh_dir.exists()
 
     result: str = setup_upload_dir()
 
-    assert result == UPLOAD_DIR
-    assert os.path.exists(UPLOAD_DIR)
+    assert result == str(fresh_dir)
+    assert fresh_dir.is_dir()
 
 
 def test_sanitize_filename_strips_path_traversal() -> None:
@@ -49,58 +41,48 @@ def test_sanitize_filename_rejects_empty() -> None:
         sanitize_filename(None)
 
 
-def test_save_uploaded_file() -> None:
+def test_save_temporary_upload_writes_bytes() -> None:
     file_content: bytes = b"sample excel content"
     fake_file: SimpleNamespace = SimpleNamespace(
         filename="sample.xlsx",
         file=BytesIO(file_content),
     )
 
-    saved_path: str = save_uploaded_file(fake_file)
+    temp_path: str = save_temporary_upload(fake_file)
 
-    assert os.path.exists(saved_path)
-    assert saved_path == os.path.join(UPLOAD_DIR, "sample.xlsx")
-
-
-def test_save_uploaded_file_requires_filename() -> None:
-    fake_file: SimpleNamespace = SimpleNamespace(
-        filename="",
-        file=BytesIO(b"data"),
-    )
-
-    with pytest.raises(ValueError, match="filename"):
-        save_uploaded_file(fake_file)
+    assert os.path.exists(temp_path)
+    assert temp_path.endswith(".part")
+    with open(temp_path, "rb") as handle:
+        assert handle.read() == file_content
 
 
-def test_save_uploaded_file_overwrites_same_name() -> None:
-    first: SimpleNamespace = SimpleNamespace(
-        filename="dup.xlsx",
-        file=BytesIO(b"one"),
-    )
-    second: SimpleNamespace = SimpleNamespace(
-        filename="dup.xlsx",
-        file=BytesIO(b"two"),
-    )
-    path: str = save_uploaded_file(first)
-    save_uploaded_file(second)
+def test_publish_upload_moves_temp_file_and_clears_old_files() -> None:
+    setup_upload_dir()
+    temp_path = os.path.join(UPLOAD_DIR, "incoming.part")
+    old_path = os.path.join(UPLOAD_DIR, "old.xlsx")
+    with open(temp_path, "wb") as handle:
+        handle.write(b"new")
+    with open(old_path, "wb") as handle:
+        handle.write(b"old")
 
-    with open(path, "rb") as handle:
-        assert handle.read() == b"two"
+    final_path = publish_upload(temp_path, "sales.xlsx")
+
+    assert os.path.basename(final_path) == "sales.xlsx"
+    assert not os.path.exists(temp_path)
+    assert not os.path.exists(old_path)
+    with open(final_path, "rb") as handle:
+        assert handle.read() == b"new"
 
 
-def test_save_uploaded_file_wraps_oserror() -> None:
+def test_save_temporary_upload_wraps_oserror() -> None:
     fake_file: SimpleNamespace = SimpleNamespace(
         filename="broken.xlsx",
         file=BytesIO(b"data"),
     )
 
-    with patch(
-        "builtins.open",
-        mock_open(),
-    ) as mocked_open:
-        mocked_open.side_effect = OSError("disk full")
+    with patch("os.fdopen", side_effect=OSError("disk full")):
         with pytest.raises(OSError, match="Failed to save upload"):
-            save_uploaded_file(fake_file)
+            save_temporary_upload(fake_file)
 
 
 def test_sanitize_filename_rejects_dot_segments() -> None:
@@ -113,7 +95,6 @@ def test_sanitize_filename_rejects_dot_segments() -> None:
 def test_delete_uploaded_file_swallows_oserror() -> None:
     with patch("os.path.exists", return_value=True):
         with patch("os.remove", side_effect=OSError("locked")):
-            # Must not raise — cleanup is best-effort.
             delete_uploaded_file("uploads/locked.xlsx")
 
 
@@ -132,8 +113,12 @@ def test_clear_upload_dir_keeps_specified_file() -> None:
     assert os.path.exists(keep_path)
 
 
-def test_clear_upload_dir_noop_when_missing() -> None:
-    # No uploads/ directory yet — must not raise.
+def test_clear_upload_dir_noop_when_upload_dir_missing(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    missing = tmp_path / "absent_uploads"
+    monkeypatch.setattr("file_manager.UPLOAD_DIR", str(missing))
     clear_upload_dir()
 
 
@@ -160,6 +145,16 @@ def test_clear_upload_dir_skips_directories() -> None:
 
     assert os.path.isdir(subdir)
     assert os.path.exists(file_path)
+
+
+def test_publish_upload_wraps_replace_error() -> None:
+    setup_upload_dir()
+    temp_path = os.path.join(UPLOAD_DIR, "incoming.part")
+    with open(temp_path, "wb") as handle:
+        handle.write(b"new")
+    with patch("os.replace", side_effect=OSError("locked")):
+        with pytest.raises(OSError, match="Failed to publish upload"):
+            publish_upload(temp_path, "sales.xlsx")
 
 
 def test_clear_upload_dir_raises_on_remove_failure() -> None:

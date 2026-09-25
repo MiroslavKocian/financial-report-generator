@@ -3,7 +3,11 @@
 import pandas as pd
 import pytest
 
-from analysis import summarize_sales
+from analysis import summarize_sales, validate_sales_dataframe
+
+
+def test_validate_sales_dataframe_accepts_valid_amount() -> None:
+    validate_sales_dataframe(pd.DataFrame({"amount": [1.0]}))
 
 
 def test_summarize_sales_totals_min_and_max() -> None:

@@ -1,36 +1,25 @@
 """Tests for FastAPI upload and home routes."""
 
-import gc
 import io
 import logging
 import os
-import shutil
 import sqlite3
-import time
 from unittest.mock import patch
 
 import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
-from database import DB_NAME, DYNAMIC_SALES_TABLE, init_db
+from database import DB_NAME, DYNAMIC_SALES_TABLE
 from file_manager import UPLOAD_DIR
 from main import app
 
-client: TestClient = TestClient(app)
 
-
-def _remove_db_file() -> None:
-    """Delete the SQLite file; retry briefly on Windows file locks."""
-    if not os.path.exists(DB_NAME):
-        return
-    gc.collect()
-    for _ in range(10):
-        try:
-            os.remove(DB_NAME)
-            return
-        except PermissionError:
-            time.sleep(0.05)
+@pytest.fixture
+def client() -> TestClient:
+    """Exercise FastAPI routes with application lifespan enabled."""
+    with TestClient(app) as test_client:
+        yield test_client
 
 
 def _excel_bytes(dataframe: pd.DataFrame) -> bytes:
@@ -39,20 +28,7 @@ def _excel_bytes(dataframe: pd.DataFrame) -> bytes:
     return buffer.getvalue()
 
 
-@pytest.fixture(autouse=True)
-def clean_environment():
-    """Clean database and upload folder for each test."""
-    _remove_db_file()
-    init_db()
-    if os.path.exists(UPLOAD_DIR):
-        shutil.rmtree(UPLOAD_DIR)
-    yield
-    _remove_db_file()
-    if os.path.exists(UPLOAD_DIR):
-        shutil.rmtree(UPLOAD_DIR)
-
-
-def test_read_root_endpoint() -> None:
+def test_read_root_endpoint(client: TestClient) -> None:
     response = client.get("/")
     assert response.status_code == 200
     assert "Upload and Store" in response.text
@@ -62,23 +38,27 @@ def test_read_root_endpoint() -> None:
 _MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 
-def _post_excel(filename: str, dataframe: pd.DataFrame):
+def _post_excel(client: TestClient, filename: str, dataframe: pd.DataFrame):
     return client.post(
         "/uploadfile/",
         files={"file": (filename, _excel_bytes(dataframe), _MIME)},
     )
 
 
-def test_summary_without_data_returns_400(caplog: pytest.LogCaptureFixture) -> None:
-    with caplog.at_level(logging.ERROR):
+def test_summary_without_data_returns_400(
+    client: TestClient,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    with caplog.at_level(logging.WARNING):
         response = client.get("/summary")
     assert response.status_code == 400
     assert "No sales data" in response.json()["detail"]
     assert "Summary request failed" in caplog.text
 
 
-def test_summary_returns_total_min_and_max() -> None:
+def test_summary_returns_total_min_and_max(client: TestClient) -> None:
     uploaded = _post_excel(
+        client,
         "sales.xlsx",
         pd.DataFrame({"Amount": [10, 25, 5]}),
     )
@@ -93,16 +73,19 @@ def test_summary_returns_total_min_and_max() -> None:
     assert body["max_amount"] == 25.0
 
 
-def test_summary_runtime_error_returns_500(caplog: pytest.LogCaptureFixture) -> None:
+def test_summary_runtime_error_returns_500(
+    client: TestClient,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     with patch("main.load_sales_dataframe", side_effect=RuntimeError("db down")):
         with caplog.at_level(logging.ERROR):
             response = client.get("/summary")
     assert response.status_code == 500
-    assert "db down" in response.json()["detail"]
+    assert "server log" in response.json()["detail"].lower()
     assert "Summary request failed" in caplog.text
 
 
-def test_upload_file_endpoint() -> None:
+def test_upload_file_endpoint(client: TestClient) -> None:
     """Happy path: disk file + uploads row + dynamic_sales_data rows."""
     excel_bytes: bytes = _excel_bytes(
         pd.DataFrame(
@@ -155,7 +138,7 @@ def test_upload_file_endpoint() -> None:
     assert data_rows[0]["upload_id"] == json_response["file_id"]
 
 
-def test_upload_invalid_file_format() -> None:
+def test_upload_invalid_file_format(client: TestClient) -> None:
     bad_bytes: bytes = b"This is just a plain text file, not Excel!"
     response = client.post(
         "/uploadfile/",
@@ -167,7 +150,7 @@ def test_upload_invalid_file_format() -> None:
     assert not os.path.exists(os.path.join(UPLOAD_DIR, "invalid.txt"))
 
 
-def test_upload_same_filename_replaces_dataset() -> None:
+def test_upload_same_filename_replaces_dataset(client: TestClient) -> None:
     first_bytes: bytes = _excel_bytes(
         pd.DataFrame({"Region": ["North"], "Amount": [1.0]})
     )
@@ -202,9 +185,9 @@ def test_upload_same_filename_replaces_dataset() -> None:
     assert data_count == 2
 
 
-def test_upload_save_value_error_returns_400() -> None:
+def test_upload_save_value_error_returns_400(client: TestClient) -> None:
     with patch(
-        "main.save_uploaded_file",
+        "main.sanitize_filename",
         side_effect=ValueError("Uploaded file must have a filename."),
     ):
         response = client.post(
@@ -215,9 +198,9 @@ def test_upload_save_value_error_returns_400() -> None:
     assert "filename" in response.json()["detail"]
 
 
-def test_upload_save_oserror_returns_500() -> None:
+def test_upload_save_oserror_returns_500(client: TestClient) -> None:
     with patch(
-        "main.save_uploaded_file",
+        "main.save_temporary_upload",
         side_effect=OSError("disk full"),
     ):
         response = client.post(
@@ -225,46 +208,16 @@ def test_upload_save_oserror_returns_500() -> None:
             files={"file": ("x.xlsx", b"data", "text/plain")},
         )
     assert response.status_code == 500
-    assert "disk full" in response.json()["detail"]
+    assert "server log" in response.json()["detail"].lower()
 
 
-def test_upload_store_value_error_cleans_metadata() -> None:
-    """ValueError after metadata INSERT must delete the uploads row."""
+def test_upload_store_runtime_error_returns_500(client: TestClient) -> None:
     excel_bytes: bytes = _excel_bytes(
         pd.DataFrame({"Region": ["North"], "Amount": [1.0]})
     )
 
     with patch(
-        "main.store_dataframe_rows",
-        side_effect=ValueError("storage rejected"),
-    ):
-        response = client.post(
-            "/uploadfile/",
-            files={
-                "file": (
-                    "ok.xlsx",
-                    excel_bytes,
-                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                )
-            },
-        )
-    assert response.status_code == 400
-    assert "storage rejected" in response.json()["detail"]
-    assert not os.path.exists(os.path.join(UPLOAD_DIR, "ok.xlsx"))
-
-    conn: sqlite3.Connection = sqlite3.connect(DB_NAME)
-    count = conn.execute("SELECT COUNT(*) FROM uploads").fetchone()[0]
-    conn.close()
-    assert count == 0
-
-
-def test_upload_store_runtime_error_returns_500() -> None:
-    excel_bytes: bytes = _excel_bytes(
-        pd.DataFrame({"Region": ["North"], "Amount": [1.0]})
-    )
-
-    with patch(
-        "main.store_dataframe_rows",
+        "main.replace_sales_dataset",
         side_effect=RuntimeError("insert failed"),
     ):
         response = client.post(
@@ -278,11 +231,36 @@ def test_upload_store_runtime_error_returns_500() -> None:
             },
         )
     assert response.status_code == 500
-    assert "insert failed" in response.json()["detail"]
+    assert "server log" in response.json()["detail"].lower()
     assert not os.path.exists(os.path.join(UPLOAD_DIR, "ok.xlsx"))
 
 
-def test_upload_replaces_previous_dataset() -> None:
+def test_upload_rejects_missing_amount_before_replace(client: TestClient) -> None:
+    first = _excel_bytes(pd.DataFrame({"Region": ["North"], "Amount": [1.0]}))
+    bad = _excel_bytes(pd.DataFrame({"Region": ["South"]}))
+    mime = _MIME
+    assert (
+        client.post(
+            "/uploadfile/",
+            files={"file": ("keep.xlsx", first, mime)},
+        ).status_code
+        == 200
+    )
+    keep_path = os.path.join(UPLOAD_DIR, "keep.xlsx")
+    with open(keep_path, "rb") as handle:
+        before = handle.read()
+
+    response = client.post(
+        "/uploadfile/",
+        files={"file": ("keep.xlsx", bad, mime)},
+    )
+    assert response.status_code == 400
+    with open(keep_path, "rb") as handle:
+        assert handle.read() == before
+    assert client.get("/summary").json()["total_amount"] == 1.0
+
+
+def test_upload_replaces_previous_dataset(client: TestClient) -> None:
     """A second valid file wipes prior disk file and DB rows."""
     first = _excel_bytes(pd.DataFrame({"Region": ["North"], "Amount": [1.0]}))
     second = _excel_bytes(
@@ -323,10 +301,10 @@ def test_upload_replaces_previous_dataset() -> None:
     assert data_rows[1]["region"] == "East"
 
 
-def test_upload_replaces_with_different_schema() -> None:
+def test_upload_replaces_with_different_schema(client: TestClient) -> None:
     """Replace also allows a new workbook with different columns."""
     first = _excel_bytes(pd.DataFrame({"Region": ["North"], "Amount": [1.0]}))
-    second = _excel_bytes(pd.DataFrame({"Product": ["Widget"], "Price": [9.5]}))
+    second = _excel_bytes(pd.DataFrame({"Product": ["Widget"], "Amount": [9.5]}))
     mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     assert (
         client.post(
@@ -344,7 +322,7 @@ def test_upload_replaces_with_different_schema() -> None:
 
     conn: sqlite3.Connection = sqlite3.connect(DB_NAME)
     conn.row_factory = sqlite3.Row
-    row = conn.execute(f"SELECT product, price FROM {DYNAMIC_SALES_TABLE}").fetchone()
+    row = conn.execute(f"SELECT product, amount FROM {DYNAMIC_SALES_TABLE}").fetchone()
     uploads_count = conn.execute("SELECT COUNT(*) FROM uploads").fetchone()[0]
     conn.close()
 
@@ -353,7 +331,7 @@ def test_upload_replaces_with_different_schema() -> None:
     assert row["product"] == "Widget"
 
 
-def test_upload_invalid_second_file_keeps_previous_data() -> None:
+def test_upload_invalid_second_file_keeps_previous_data(client: TestClient) -> None:
     """A bad second upload must not wipe the first successful dataset."""
     first = _excel_bytes(pd.DataFrame({"Region": ["North"], "Amount": [1.0]}))
     mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"

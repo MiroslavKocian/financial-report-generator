@@ -43,6 +43,17 @@ def test_load_excel_dataframe_rejects_empty_columns() -> None:
             load_excel_dataframe("ignored.xlsx")
 
 
+def test_load_excel_dataframe_rejects_empty_rows(tmp_path: Path) -> None:
+    source: Path = tmp_path / "empty.xlsx"
+    pd.DataFrame(columns=["Amount"]).to_excel(
+        source,
+        index=False,
+        engine="openpyxl",
+    )
+    with pytest.raises(ValueError, match="no data rows"):
+        load_excel_dataframe(source)
+
+
 def test_load_excel_dataframe_rejects_duplicate_columns() -> None:
     duplicate_frame: pd.DataFrame = pd.DataFrame(
         [[1, 2]],

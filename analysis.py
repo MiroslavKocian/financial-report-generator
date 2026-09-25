@@ -40,6 +40,11 @@ def _numeric_amounts(dataframe: pd.DataFrame) -> pd.Series:
     return amounts
 
 
+def validate_sales_dataframe(dataframe: pd.DataFrame) -> None:
+    """Ensure a workbook is ready for storage and summary."""
+    _numeric_amounts(dataframe)
+
+
 def summarize_sales(dataframe: pd.DataFrame) -> dict:
     """Build the summary dict for one sales DataFrame."""
     amounts: pd.Series = _numeric_amounts(dataframe)

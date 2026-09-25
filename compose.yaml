@@ -1,0 +1,11 @@
+services:
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - app-data:/app/uploads
+    restart: unless-stopped
+
+volumes:
+  app-data:

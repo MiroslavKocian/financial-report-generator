@@ -50,6 +50,8 @@ def load_excel_dataframe(file_path: str | Path) -> pd.DataFrame:
         raise ValueError("Excel file has no columns.")
     if len(normalized_columns) != len(set(normalized_columns)):
         raise ValueError("Excel file has duplicate column names.")
+    if dataframe.empty:
+        raise ValueError("Excel file has no data rows.")
 
     # Copy so callers get a new frame instead of a mutated original.
     result: pd.DataFrame = dataframe.copy()

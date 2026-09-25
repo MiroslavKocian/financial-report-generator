@@ -2,44 +2,63 @@
 
 [![Tests](https://github.com/MiroslavKocian/financial-report-generator/actions/workflows/test.yml/badge.svg)](https://github.com/MiroslavKocian/financial-report-generator/actions/workflows/test.yml)
 
-Upload an Excel sales file, store rows in **SQLite** with **raw SQL**, and generate a **pandas** summary report over **FastAPI**. The UI uses **Jinja2**; the stack includes **Docker** and **GitHub Actions** CI.
+**Repository:** [github.com/MiroslavKocian/financial-report-generator](https://github.com/MiroslavKocian/financial-report-generator)
+
+Upload an Excel sales workbook, persist rows in **SQLite** with **hand-written SQL**, and read a **JSON summary** (`total_amount`, `min_amount`, `max_amount`) from **FastAPI**. The browser UI is a small **Jinja2** page; the project ships with **pytest** (100% coverage on core modules), **Ruff**, **Docker**, and **GitHub Actions**.
+
+## What this demo shows
+
+| Topic | Where in the repo |
+|--------|-------------------|
+| REST API + OpenAPI | `main.py`, `/docs` |
+| Raw SQL (no ORM) | `database.py` |
+| File upload safety | `file_manager.py` (`basename`, temp file, atomic publish) |
+| Excel → pandas | `excel_loader.py` |
+| Validation + reporting | `analysis.py` |
+| Typed API responses | `schemas.py` |
+| Automated quality gate | `.github/workflows/test.yml` |
+
+Only **one active dataset** exists at a time. A new upload **replaces** the previous file on disk and the previous rows in SQLite. Re-uploading the **same filename** is allowed.
 
 ## Features
 
-- **Upload** `.xlsx` files with sanitized filenames and a single active dataset on disk and in the database
-- **Persist** each row via parameterized SQL (`uploads` metadata + `dynamic_sales_data`)
-- **Report** via `GET /summary`: `total_amount`, `min_amount`, and `max_amount` for the `amount` column
-
-Uploading again with the **same filename** overwrites the file and refreshes stored rows.
+- **Upload** `.xlsx` via the web form or `POST /uploadfile/`
+- **Validate** before replace: bad Excel or missing numeric `amount` never wipes good data
+- **Store** metadata in `uploads` and row data in `dynamic_sales_data` (column layout follows the workbook)
+- **Report** via `GET /summary` as JSON
 
 ## Stack
 
-- **Python 3.11** — FastAPI, Uvicorn, pandas, openpyxl
-- **SQLite** — `database.py`
-- **HTML** — `templates/index.html`
-- **pytest** — coverage on `database`, `file_manager`, `excel_loader`, `analysis`, `main`
+- Python **3.11**
+- **FastAPI**, **Uvicorn**, **Jinja2**, **python-multipart**
+- **pandas**, **openpyxl**
+- **SQLite** (`sales_data.db`, created on startup)
+- **pytest**, **pytest-cov**, **Ruff**
 
 ## Architecture
 
-One active dataset. Upload and summary are separate requests; the report is JSON from `GET /summary`.
+Upload and summary are separate HTTP requests. The upload path parses and validates **before** any destructive step.
 
 ```mermaid
 flowchart TD
-    subgraph client [Browser]
-        form[Upload form GET /]
-        summaryLink[View summary]
+    subgraph client [Browser or HTTP client]
+        form[GET / upload form]
+        post[POST /uploadfile/]
+        summary[GET /summary]
     end
 
     subgraph api [FastAPI main.py]
-        uploadRoute[POST /uploadfile/]
-        summaryRoute[GET /summary]
+        uploadRoute[create_upload_file]
+        summaryRoute[read_summary]
     end
 
-    subgraph ingest [Upload pipeline]
-        files[file_manager.py]
-        excel[excel_loader.py]
-        clear[Clear prior file + DB rows]
-        dbWrite[database.py raw SQL INSERT]
+    subgraph uploadPipeline [Upload pipeline]
+        sanitize[sanitize_filename]
+        temp[save_temporary_upload .part]
+        excel[load_excel_dataframe]
+        validate[validate_sales_dataframe]
+        replace[replace_sales_dataset transaction]
+        publish[publish_upload os.replace]
     end
 
     subgraph storage [Persistence]
@@ -47,56 +66,56 @@ flowchart TD
         sqlite[(SQLite sales_data.db)]
     end
 
-    subgraph report [Summary pipeline]
-        dbRead[load_sales_dataframe SELECT]
-        pandas[analysis.py summarize_sales]
-        json[JSON report]
+    subgraph reportPipeline [Summary pipeline]
+        load[load_sales_dataframe SELECT]
+        pandas[summarize_sales]
+        json[SummaryResponse JSON]
     end
 
-    form -->|multipart file| uploadRoute
-    uploadRoute --> files
-    files --> disk
-    uploadRoute --> excel
-    excel -->|pandas DataFrame| clear
-    clear --> disk
-    clear --> sqlite
-    clear --> dbWrite
-    dbWrite --> sqlite
+    form --> uploadRoute
+    post --> uploadRoute
+    uploadRoute --> sanitize --> temp --> excel --> validate --> replace
+    replace --> sqlite
+    validate --> replace
+    replace --> publish --> disk
 
-    summaryLink --> summaryRoute
-    summaryRoute --> dbRead
-    dbRead --> sqlite
-    dbRead -->|DataFrame| pandas
-    pandas --> json
-    json --> summaryRoute
-    summaryRoute --> client
+    summary --> summaryRoute --> load --> sqlite
+    load --> pandas --> json --> summaryRoute
 ```
 
-| Stage | Module | What happens |
-|-------|--------|----------------|
-| Ingest | `file_manager` | Sanitize filename, write bytes to `uploads/` (same name replaces file) |
-| Parse | `excel_loader` | Read `.xlsx`, normalize headers (`Amount` → `amount`) |
-| Replace | `main` + `database` | After a valid parse: remove old uploads, refresh sales table and metadata |
-| Report | `analysis` | Load rows → `total_amount`, `min_amount`, `max_amount` |
+| Step | Module | Responsibility |
+|------|--------|----------------|
+| Sanitize | `file_manager` | Strip path segments; reject empty names |
+| Stage | `file_manager` | Write bytes to a `.part` file under `uploads/` |
+| Parse | `excel_loader` | Read `.xlsx`; normalize headers (`Amount` → `amount`) |
+| Validate | `analysis` | Require numeric `amount` on every row |
+| Replace DB | `database` | Single transaction: drop old table, new `uploads` row, insert rows |
+| Publish file | `file_manager` | `os.replace` to final name; delete other files in `uploads/` |
+| Report | `analysis` | `total_amount`, `min_amount`, `max_amount`, `row_count` |
 
-If parsing fails before the replace step, the previous dataset remains in place.
+If anything fails **before** `replace_sales_dataset` succeeds, the temp file is removed and the previous dataset stays intact.
 
 ## Excel format
 
-- File type: **`.xlsx`** (openpyxl).
-- Required column: **`amount`** (headers normalized, e.g. `Amount` → `amount`). Numeric values only.
-- Additional columns (e.g. `region`) are stored with each row.
-- Duplicate headers after normalization are rejected.
+- **Type:** `.xlsx` only (openpyxl).
+- **Required column:** `amount` (any header that normalizes to `amount`, e.g. `Amount`, ` AMOUNT `).
+- **Values:** numeric; empty `amount` cells are rejected at summary time.
+- **Extra columns:** stored as TEXT (e.g. `region`, `product`).
+- **Rules:** at least one data row; no duplicate headers after normalization; column names must be valid SQL identifiers (letters, digits, underscore).
+
+Sample file: [`examples/sales_example.xlsx`](examples/sales_example.xlsx).
 
 ## API
 
+Interactive docs while the server runs: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs).
+
 ### `GET /`
 
-Upload form and link to the summary.
+HTML upload form, link to `/summary` and `/docs`.
 
 ### `POST /uploadfile/`
 
-`multipart/form-data` field: `file`.
+`multipart/form-data` field name: **`file`**.
 
 **200 example:**
 
@@ -109,7 +128,9 @@ Upload form and link to the summary.
 }
 ```
 
-**400** — invalid Excel, missing `amount`, unsafe filename, etc.
+**400** — invalid workbook, missing/invalid `amount`, reserved column names (`id`, `upload_id`), unsafe filename, etc.
+
+**500** — disk or database failure (detail is generic; see server logs).
 
 ### `GET /summary`
 
@@ -126,53 +147,169 @@ Upload form and link to the summary.
 
 **400** — no data stored yet.
 
-OpenAPI UI: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs) while the server is running.
+## Prerequisites
+
+- **Python 3.11** ([python.org](https://www.python.org/downloads/)) or Docker Desktop
+- **Git** (to clone)
+- On Windows PowerShell: if `Activate.ps1` is blocked, run  
+  `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once (or use `cmd` / WSL for bash steps below)
 
 ## Run locally
 
+### 1. Clone and enter the project
+
 ```powershell
+git clone https://github.com/MiroslavKocian/financial-report-generator.git
 cd financial-report-generator
+```
+
+```bash
+git clone https://github.com/MiroslavKocian/financial-report-generator.git
+cd financial-report-generator
+```
+
+### 2. Create a virtual environment and install dependencies
+
+**Windows (PowerShell):**
+
+```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
+```
+
+**macOS / Linux (bash):**
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+### 3. Start the server
+
+**Option A — `main.py` (reload for development):**
+
+```powershell
 python main.py
 ```
 
-Open [http://127.0.0.1:8000](http://127.0.0.1:8000).  
-`main.py` runs Uvicorn with `reload=True` for development.
+**Option B — Uvicorn directly (no reload):**
 
-### Tests
+```powershell
+uvicorn main:app --host 127.0.0.1 --port 8000
+```
+
+**Option C — Uvicorn with reload:**
+
+```powershell
+uvicorn main:app --host 127.0.0.1 --port 8000 --reload
+```
+
+Open [http://127.0.0.1:8000](http://127.0.0.1:8000).
+
+On first start the app creates `sales_data.db` and the `uploads/` directory (when you upload).
+
+### 4. Try the demo flow
+
+1. Open the home page and upload `examples/sales_example.xlsx`, or any `.xlsx` with an `amount` column.
+2. Open [http://127.0.0.1:8000/summary](http://127.0.0.1:8000/summary) for JSON.
+
+**curl (bash):**
+
+```bash
+curl -F "file=@examples/sales_example.xlsx" http://127.0.0.1:8000/uploadfile/
+curl http://127.0.0.1:8000/summary
+```
+
+**PowerShell:**
+
+```powershell
+curl.exe -F "file=@examples/sales_example.xlsx" http://127.0.0.1:8000/uploadfile/
+curl.exe http://127.0.0.1:8000/summary
+```
+
+### 5. Tests and lint
 
 ```powershell
 pytest
-```
-
-### CI
-
-Every **push** and **pull request** runs `pytest` (`.github/workflows/test.yml`).
-
-### Lint
-
-```powershell
 ruff check .
+ruff format .
 ```
+
+CI runs the same checks on every push and pull request (see `.github/workflows/test.yml`).
 
 ## Docker
+
+### Build and run (single container)
 
 ```powershell
 docker build -t financial-report-generator .
 docker run --rm -p 8000:8000 financial-report-generator
 ```
 
+Browse [http://127.0.0.1:8000](http://127.0.0.1:8000).
+
+The image runs Uvicorn as non-root user `appuser` on port **8000**.
+
+**Persist uploads across container restarts** (optional):
+
+```powershell
+docker run --rm -p 8000:8000 -v frg-uploads:/app/uploads financial-report-generator
+```
+
+SQLite (`sales_data.db`) lives inside the container filesystem unless you mount a volume for `/app` or the database file explicitly.
+
+### Docker Compose
+
+```powershell
+docker compose up --build
+```
+
+`compose.yaml` maps port **8000** and mounts a named volume on `/app/uploads` so uploaded Excel files survive restarts. Stop with `docker compose down`.
+
 ## Project layout
 
 ```text
-main.py           # FastAPI routes and upload pipeline
-database.py       # SQLite schema, inserts, load_sales_dataframe()
-excel_loader.py   # Read Excel, normalize column names
-analysis.py       # summarize_sales() — total / min / max
-file_manager.py   # uploads/ directory, sanitize, replace on same name
-templates/        # Upload UI
-tests/            # pytest suite
-AGENTS.md         # Contributor and agent conventions
+financial-report-generator/
+├── main.py                 # FastAPI app, routes, lifespan (init_db)
+├── database.py             # SQLite: replace_sales_dataset, load_sales_dataframe
+├── file_manager.py         # uploads/: sanitize, temp save, publish
+├── excel_loader.py         # pandas read_excel + column normalization
+├── analysis.py             # validate_sales_dataframe, summarize_sales
+├── schemas.py              # Pydantic UploadResponse, SummaryResponse
+├── templates/
+│   └── index.html          # Upload UI
+├── examples/
+│   └── sales_example.xlsx  # Sample workbook for demos
+├── tests/                  # pytest suite (isolated DB/uploads per test)
+├── .github/workflows/
+│   └── test.yml            # Ruff + pytest + coverage
+├── Dockerfile
+├── compose.yaml
+├── requirements.txt
+├── pyproject.toml          # pytest coverage, Ruff line length
+├── AGENTS.md               # Design and contribution rules for humans/agents
+└── README.md
 ```
+
+Generated at runtime (gitignored): `sales_data.db`, `uploads/`.
+
+## Troubleshooting
+
+| Issue | What to try |
+|--------|-------------|
+| Port 8000 in use | Stop the other process or use `--port 8001` with Uvicorn |
+| `Activate.ps1` blocked | `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` |
+| Upload 400 | Ensure `.xlsx`, header normalizes to `amount`, numeric values, ≥1 row |
+| Summary 400 after fresh install | Upload a file first |
+| Docker: empty summary after restart | DB was ephemeral; upload again or mount DB path |
+| CI fails on format | Run `ruff format .` locally and commit |
+
+## Contributing
+
+Follow [`AGENTS.md`](AGENTS.md): raw SQL only, no Streamlit, English comments, small focused changes, fail fast with logging on I/O errors.
+
+## License
+
+No license file is set yet; treat the repository as source for portfolio and interview discussion unless a `LICENSE` is added.
