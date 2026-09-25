@@ -21,6 +21,69 @@ A small **educational** web app: upload one Excel sales file, store rows in **SQ
 - **HTML** — simple upload form (`templates/index.html`)
 - **pytest** — 100% coverage on app modules (`pyproject.toml`)
 
+## Architecture
+
+The app keeps **one active dataset**. Upload and summary are separate HTTP requests; the
+“report” today is a **JSON summary** (`total`, `min`, `max` on `amount`), not a PDF.
+
+```mermaid
+flowchart TD
+    subgraph client [Browser]
+        form[Upload form GET /]
+        summaryLink[View summary]
+    end
+
+    subgraph api [FastAPI main.py]
+        uploadRoute[POST /uploadfile/]
+        summaryRoute[GET /summary]
+    end
+
+    subgraph ingest [Upload pipeline]
+        files[file_manager.py]
+        excel[excel_loader.py]
+        clear[Clear prior file + DB rows]
+        dbWrite[database.py raw SQL INSERT]
+    end
+
+    subgraph storage [Persistence]
+        disk[(uploads/*.xlsx)]
+        sqlite[(SQLite sales_data.db)]
+    end
+
+    subgraph report [Summary pipeline]
+        dbRead[load_sales_dataframe SELECT]
+        pandas[analysis.py summarize_sales]
+        json[JSON report]
+    end
+
+    form -->|multipart file| uploadRoute
+    uploadRoute --> files
+    files --> disk
+    uploadRoute --> excel
+    excel -->|pandas DataFrame| clear
+    clear --> disk
+    clear --> sqlite
+    clear --> dbWrite
+    dbWrite --> sqlite
+
+    summaryLink --> summaryRoute
+    summaryRoute --> dbRead
+    dbRead --> sqlite
+    dbRead -->|DataFrame| pandas
+    pandas --> json
+    json --> summaryRoute
+    summaryRoute --> client
+```
+
+| Stage | Module | What happens |
+|-------|--------|----------------|
+| Ingest | `file_manager` | Sanitize filename, write bytes to `uploads/` (same name replaces file) |
+| Parse | `excel_loader` | Read `.xlsx`, normalize headers (`Amount` → `amount`) |
+| Replace | `main` + `database` | On valid parse only: remove old uploads, `DROP` sales data, new `uploads` row + rows in `dynamic_sales_data` |
+| Report | `analysis` | `SELECT` active rows → `total_amount`, `min_amount`, `max_amount` |
+
+If Excel parsing fails **before** the replace step, the previous dataset on disk and in SQLite is left unchanged.
+
 ## Excel format
 
 - File type: **`.xlsx`** (read via openpyxl).
@@ -120,12 +183,6 @@ templates/        # Upload UI
 tests/            # pytest suite
 AGENTS.md         # Conventions for contributors and AI agents
 ```
-
-## Pipeline (upload)
-
-1. Save bytes under `uploads/` with a sanitized name (same name overwrites).
-2. Parse Excel; on failure, **keep** any previous dataset.
-3. On success: clear other files in `uploads/`, drop sales table + upload metadata, insert new rows.
 
 ## Scope
 
