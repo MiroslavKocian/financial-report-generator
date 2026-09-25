@@ -2,138 +2,30 @@
 
 [![Tests](https://github.com/MiroslavKocian/financial-report-generator/actions/workflows/test.yml/badge.svg)](https://github.com/MiroslavKocian/financial-report-generator/actions/workflows/test.yml)
 
-Upload an Excel sales workbook, save rows in **SQLite** with **SQL in Python** (no ORM), and view a **JSON summary** in the browser. Built with **FastAPI**, **pandas**, and a small **Jinja2** upload page.
+A small web app: you upload an Excel file with sales data, the app saves every row into a SQLite database, and a summary page shows the total, minimum, and maximum `amount`.
 
-**Repository:** https://github.com/MiroslavKocian/financial-report-generator
+Built with Python 3.11, FastAPI, pandas, and SQLite. All database queries are plain SQL written by hand (no ORM).
 
-## Project folder (after clone)
+## Requirements
 
-All paths below are relative to the folder you get after:
-
-```sh
-git clone https://github.com/MiroslavKocian/financial-report-generator.git
-cd financial-report-generator
-```
-
-That folder is the **project root**. Example on Windows if you cloned to the Desktop:
-
-`C:\Users\<YourName>\Desktop\financial-report-generator`
-
-The sample Excel file is **on your disk** (not a web address):
-
-`financial-report-generator\examples\sales_example.xlsx`
-
-(in the project root, open the `examples` folder, file name `sales_example.xlsx`).
-
-## What this demo shows
-
-| Topic | File in git (under project root) |
-|--------|----------------------------------|
-| Web app and routes | `main.py` |
-| JSON response models | `schemas.py` |
-| Raw SQL (no ORM) | `database.py` |
-| Safe file handling | `file_manager.py` |
-| Excel import | `excel_loader.py` |
-| Validation and totals | `analysis.py` |
-| Automated tests on push | `.github/workflows/test.yml` |
-
-One **active dataset** at a time. Each new upload replaces the previous Excel file and all rows in the database. Same filename is allowed.
-
-## Features
-
-- Upload `.xlsx` using the form on the home page (file picker on your computer)
-- Invalid files are rejected **before** the old data is deleted
-- Database file `sales_data.db` appears in the **project root** when the server starts
-- Uploaded Excel is stored in the `uploads` folder under the **project root**
-- Summary page shows `total_amount`, `min_amount`, and `max_amount`
-
-## Stack
-
-Python **3.11**, FastAPI, Uvicorn, Jinja2, pandas, openpyxl, SQLite, pytest, Ruff, Docker, GitHub Actions.
-
-## Architecture
-
-```mermaid
-flowchart TD
-    subgraph browser [Browser]
-        home[Home: upload form]
-        summaryPage[Summary: JSON report]
-    end
-
-    subgraph api [main.py]
-        uploadRoute[upload handler]
-        summaryRoute[summary handler]
-    end
-
-    subgraph pipeline [On upload]
-        sanitize[sanitize filename]
-        temp[temp file .part]
-        excel[read Excel]
-        validate[check amount column]
-        replace[replace DB in one transaction]
-        publish[save final .xlsx]
-    end
-
-    subgraph storage [Storage]
-        disk[uploads folder in project root]
-        sqlite[sales_data.db in project root]
-    end
-
-    home --> uploadRoute --> sanitize --> temp --> excel --> validate --> replace
-    replace --> sqlite
-    replace --> publish --> disk
-    summaryPage --> summaryRoute --> sqlite
-```
-
-| Step | Module |
-|------|--------|
-| Filename safety, temp file, publish | `file_manager` |
-| Read Excel, normalize column names | `excel_loader` |
-| Check numeric `amount` | `analysis` |
-| SQL insert and replace | `database` |
-
-## Excel format
-
-- `.xlsx` only
-- Column **`amount`** required (header can be `Amount`, ` AMOUNT `, and similar)
-- Numbers only in `amount`; at least one row
-- Extra columns (e.g. `region`) are stored too
-
-You can use the included sample file `examples/sales_example.xlsx` or any workbook that follows these rules.
-
-## Pages (start the server first)
-
-Start with `python main.py` from the **project root** (see below). Then use these links in the browser:
-
-| Page | Link |
-|------|------|
-| Upload form | [http://127.0.0.1:8000](http://127.0.0.1:8000) |
-| Summary (JSON) | [http://127.0.0.1:8000/summary](http://127.0.0.1:8000/summary) |
-| API reference (FastAPI) | [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs) |
-
-On the upload page, click **Select Excel file**, pick a `.xlsx` from your PC, then **Upload and Store**. You never type a file path into the address bar.
-
-## Prerequisites
-
-- Python 3.11 — https://www.python.org/downloads/
-- Git
-- Docker Desktop — only for the Docker section — https://www.docker.com/products/docker-desktop/
-- Windows: if `Activate.ps1` fails, run once: `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`
+- [Python 3.11](https://www.python.org/downloads/)
+- [Git](https://git-scm.com/downloads)
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (only if you want to run the app in Docker)
 
 ## Run locally
 
-### 1. Clone into a folder on your PC
+### 1. Download the project
 
 ```sh
 git clone https://github.com/MiroslavKocian/financial-report-generator.git
 cd financial-report-generator
 ```
 
-Stay in this folder for all following steps.
+This creates a folder named `financial-report-generator`. Run every following command inside this folder.
 
-### 2. Virtual environment
+### 2. Install dependencies
 
-Windows (PowerShell), still in the project root:
+Windows (PowerShell):
 
 ```powershell
 python -m venv .venv
@@ -149,60 +41,113 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 3. Start server
+If PowerShell refuses to run `Activate.ps1`, run this once and try again:
 
-From the **same project root** folder:
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+```
+
+### 3. Start the app
 
 ```sh
 python main.py
 ```
 
-Leave this terminal open. Open [http://127.0.0.1:8000](http://127.0.0.1:8000) in your browser.
+Keep this terminal window open. The app runs as long as it is open. To stop it, press **Ctrl+C**.
 
-The file `sales_data.db` is created in the project root on first start.
+### 4. Use the app
 
-### 4. Upload and summary
+1. Open [http://127.0.0.1:8000](http://127.0.0.1:8000) in your browser.
+2. Under **Select Excel file**, click the file button and pick the sample file `sales_example.xlsx`. It is in the `examples` folder inside the project folder you downloaded in step 1.
+3. Click **Upload and Store**. The browser shows a short confirmation, for example:
 
-1. In the browser, open [http://127.0.0.1:8000](http://127.0.0.1:8000).
-2. Click **Select Excel file** (or **Browse**). In the file dialog, go to your **project root** → open the **`examples`** folder → choose **`sales_example.xlsx`**.
-3. Click **Upload and Store**.
-4. Open [http://127.0.0.1:8000/summary](http://127.0.0.1:8000/summary) to see the JSON report.
+   ```json
+   {"filename": "sales_example.xlsx", "file_id": 1, "rows_stored": 2, "status": "File uploaded and raw data stored via raw SQL"}
+   ```
 
-You can upload any other `.xlsx` from your PC that has an `amount` column; the sample is just for a quick test.
+4. Open [http://127.0.0.1:8000/summary](http://127.0.0.1:8000/summary). For the sample file you will see:
 
-### 5. Tests
+   ```json
+   {"row_count": 2, "total_amount": 35.0, "min_amount": 10.0, "max_amount": 25.0}
+   ```
 
-With the virtual environment active, from the **project root**:
+Every new upload replaces the previous data. Uploading a file with the same name again is allowed.
 
-```sh
-pytest
-ruff check .
-ruff format .
-```
+FastAPI also generates an interactive API page at [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs), where you can see and try every endpoint.
 
-Pushes to GitHub run the same checks in the repository **Actions** tab on GitHub.
+## Run with Docker
 
-## Docker
-
-From the **project root** on your PC:
+Start Docker Desktop, then in the project folder run:
 
 ```sh
 docker compose up --build
 ```
 
-Leave the terminal open. In the browser use [http://127.0.0.1:8000](http://127.0.0.1:8000) (not `0.0.0.0` from the logs).
+When the log shows `Application startup complete`, follow the steps in [Use the app](#4-use-the-app). The log says `http://0.0.0.0:8000`; that is the address inside the container. In your browser, use [http://127.0.0.1:8000](http://127.0.0.1:8000).
 
-For upload, use the same file picker as in step **4**: choose `sales_example.xlsx` from the **`examples`** folder inside the project you cloned on your computer.
-
-Stop with **Ctrl+C**, then:
+To stop, press **Ctrl+C**, then run:
 
 ```sh
 docker compose down
 ```
 
-## Project layout
+The database lives inside the container, so after `docker compose down` the data is gone. Upload the file again after the next start.
 
-Everything lives under the project root, for example:
+## Excel file rules
+
+- The file must be `.xlsx`.
+- It must have a column named `amount`. Capital letters and extra spaces in the header are fine (`Amount`, ` AMOUNT `).
+- Every `amount` cell must be a number, and the file must have at least one data row.
+- Other columns (for example `region`, `product`) are saved too.
+- Column names may contain only letters, digits, and underscores (spaces become underscores). `id` and `upload_id` are not allowed as column names.
+
+If a file breaks a rule, the app shows an error message and keeps the previously uploaded data.
+
+## How it works
+
+```mermaid
+flowchart TD
+    browser[Browser upload form] --> save[Save file as temporary copy]
+    save --> read[Read Excel with pandas]
+    read --> check[Check the amount column]
+    check --> db[Replace data in SQLite in one transaction]
+    db --> publish[Keep the file under its real name]
+    summary[Summary page] --> query[Read rows from SQLite]
+    query --> totals[Compute total, min, max with pandas]
+```
+
+1. The uploaded file is first saved as a temporary copy.
+2. pandas reads it and the `amount` column is checked.
+3. Only if everything is valid, the old data is replaced with the new rows in a single database transaction. If anything fails, the old data stays untouched.
+4. The summary page reads the rows back from SQLite and computes the numbers.
+
+| File | Responsibility |
+|------|----------------|
+| `main.py` | Web routes and the upload flow |
+| `file_manager.py` | Safe file names, temporary file, final file |
+| `excel_loader.py` | Reading Excel and cleaning up column names |
+| `analysis.py` | Checking `amount` and computing the summary |
+| `database.py` | All SQL queries |
+| `schemas.py` | Shape of the JSON responses |
+| `templates/index.html` | Upload page |
+
+Files created while the app runs (not stored in Git): `sales_data.db` (the database) and the `uploads` folder (the latest uploaded Excel file). Both appear in the project folder.
+
+## Tests
+
+With the virtual environment active:
+
+```sh
+pytest
+ruff check .
+ruff format --check .
+```
+
+`pytest` runs all tests and requires 100% code coverage. `ruff` checks code style.
+
+GitHub runs the same three commands automatically after every push (file `.github/workflows/test.yml`). The green **Tests** badge at the top of this page shows the latest result.
+
+## Project structure
 
 ```text
 financial-report-generator/
@@ -212,9 +157,10 @@ financial-report-generator/
 ├── excel_loader.py
 ├── analysis.py
 ├── schemas.py
-├── templates/index.html
+├── templates/
+│   └── index.html
 ├── examples/
-│   └── sales_example.xlsx    ← sample file for step 4
+│   └── sales_example.xlsx
 ├── tests/
 ├── .github/workflows/test.yml
 ├── Dockerfile
@@ -224,26 +170,17 @@ financial-report-generator/
 └── AGENTS.md
 ```
 
-After you run the app locally you will also see (not in git):
-
-- `sales_data.db` — in the project root  
-- `uploads/` — folder in the project root with the saved Excel file  
+`pyproject.toml` holds the pytest and Ruff settings. `AGENTS.md` holds the coding rules followed while building this project.
 
 ## Troubleshooting
 
-| Problem | Fix |
-|---------|-----|
-| Cannot find sample file | It is not a URL. In the file picker, browse to `examples\sales_example.xlsx` under your clone folder. |
-| Port 8000 busy | Close the other program using port 8000, or stop the other `python main.py` terminal. |
-| `Activate.ps1` blocked | `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` |
-| Upload fails | `.xlsx`, `amount` column, numeric values, at least one row |
-| Summary empty | Complete step 4 (upload) before opening the summary link |
-| Docker: no data after restart | Upload the Excel file again from the file picker |
-
-## Contributing
-
-See [`AGENTS.md`](AGENTS.md).
+| Problem | Solution |
+|---------|----------|
+| Browser says the page cannot be reached | The app is not running. Start it with `python main.py` and keep the terminal open. |
+| `Address already in use` / port 8000 busy | Another app (or a second copy of this one) is using port 8000. Close it and start again. |
+| Summary shows `No sales data is stored.` | Nothing has been uploaded yet. Upload a file first. |
+| Upload shows an error | The file breaks one of the [Excel file rules](#excel-file-rules). The message says which one. |
 
 ## License
 
-Portfolio and interview use; no `LICENSE` file unless one is added later.
+No license is granted. The code is published to be viewed as a portfolio project.
