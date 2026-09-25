@@ -1,6 +1,5 @@
 <!--
-  Entry UI for steps 1-2: pick an Excel file and POST it to FastAPI.
-  Analysis / PDF export come later; this page only starts the pipeline.
+  Entry UI: upload one Excel file, then open the JSON summary.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -12,7 +11,10 @@
 <body>
     <header>
         <h1>Financial Report Generator</h1>
-        <p>Upload an Excel sales file to store raw data in SQLite.</p>
+        <p>
+            Upload one Excel file with an amount column. The summary shows
+            total, minimum, and maximum amount.
+        </p>
     </header>
 
     <main>
@@ -28,6 +30,7 @@
             >
             <input type="submit" value="Upload and Store">
         </form>
+        <p><a href="/summary">View summary (JSON)</a></p>
     </main>
 
     <footer>

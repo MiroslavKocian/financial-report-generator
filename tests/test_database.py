@@ -16,6 +16,7 @@ from database import (
     get_db_connection,
     init_db,
     insert_generic_row,
+    load_sales_dataframe,
     save_upload_metadata,
     store_dataframe_rows,
     validate_sql_identifier,
@@ -221,3 +222,89 @@ def test_insert_generic_row_raises_when_lastrowid_missing() -> None:
                 "uploads",
                 {"filename": "x.xlsx"},
             )
+
+
+def test_load_sales_dataframe_reads_stored_rows() -> None:
+    upload_id: int = save_upload_metadata("rows.xlsx")
+    store_dataframe_rows(
+        upload_id,
+        pd.DataFrame({"amount": [10.5, 2]}),
+    )
+
+    loaded: pd.DataFrame = load_sales_dataframe()
+
+    assert list(loaded.columns) == ["amount"]
+    assert len(loaded) == 2
+    assert str(loaded.iloc[0]["amount"]) in {"10.5", "10.50"}
+
+
+def test_load_sales_dataframe_requires_stored_data() -> None:
+    with pytest.raises(ValueError, match="No sales data"):
+        load_sales_dataframe()
+
+
+def test_load_sales_dataframe_rejects_empty_table() -> None:
+    ensure_dynamic_sales_table(["amount"])
+    with pytest.raises(ValueError, match="No sales data"):
+        load_sales_dataframe()
+
+
+def test_load_sales_dataframe_rejects_unsafe_column() -> None:
+    conn: sqlite3.Connection = get_db_connection()
+    conn.execute(
+        """
+        CREATE TABLE dynamic_sales_data (
+            id INTEGER PRIMARY KEY,
+            "bad-col" TEXT
+        )
+        """
+    )
+    conn.execute("INSERT INTO dynamic_sales_data (\"bad-col\") VALUES ('1')")
+    conn.commit()
+    conn.close()
+
+    with pytest.raises(ValueError, match="Invalid SQL identifier"):
+        load_sales_dataframe()
+
+
+def test_load_sales_dataframe_rejects_table_without_data_columns() -> None:
+    conn: sqlite3.Connection = get_db_connection()
+    conn.execute(
+        """
+        CREATE TABLE dynamic_sales_data (
+            id INTEGER PRIMARY KEY,
+            upload_id INTEGER
+        )
+        """
+    )
+    conn.commit()
+    conn.close()
+
+    with pytest.raises(ValueError, match="No sales data"):
+        load_sales_dataframe()
+
+
+def test_load_sales_dataframe_wraps_sqlite_error(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    upload_id: int = save_upload_metadata("rows.xlsx")
+    store_dataframe_rows(upload_id, pd.DataFrame({"amount": [1]}))
+    real_conn: sqlite3.Connection = get_db_connection()
+
+    class _FailingSelect:
+        """Real connection, except the sales SELECT raises."""
+
+        def execute(self, sql: str, *params: Any) -> sqlite3.Cursor:
+            if sql.startswith("SELECT amount"):
+                raise sqlite3.Error("disk")
+            return real_conn.execute(sql, *params)
+
+        def close(self) -> None:
+            real_conn.close()
+
+    with patch("database.get_db_connection", return_value=_FailingSelect()):
+        with caplog.at_level("ERROR"):
+            with pytest.raises(RuntimeError, match="Failed to load sales data"):
+                load_sales_dataframe()
+
+    assert "disk" in caplog.text

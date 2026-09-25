@@ -2,6 +2,7 @@
 
 import gc
 import io
+import logging
 import os
 import shutil
 import sqlite3
@@ -55,6 +56,50 @@ def test_read_root_endpoint() -> None:
     response = client.get("/")
     assert response.status_code == 200
     assert "Upload and Store" in response.text
+    assert 'href="/summary"' in response.text
+
+
+_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+
+def _post_excel(filename: str, dataframe: pd.DataFrame):
+    return client.post(
+        "/uploadfile/",
+        files={"file": (filename, _excel_bytes(dataframe), _MIME)},
+    )
+
+
+def test_summary_without_data_returns_400(caplog: pytest.LogCaptureFixture) -> None:
+    with caplog.at_level(logging.ERROR):
+        response = client.get("/summary")
+    assert response.status_code == 400
+    assert "No sales data" in response.json()["detail"]
+    assert "Summary request failed" in caplog.text
+
+
+def test_summary_returns_total_min_and_max() -> None:
+    uploaded = _post_excel(
+        "sales.xlsx",
+        pd.DataFrame({"Amount": [10, 25, 5]}),
+    )
+    assert uploaded.status_code == 200
+
+    response = client.get("/summary")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["row_count"] == 3
+    assert body["total_amount"] == 40.0
+    assert body["min_amount"] == 5.0
+    assert body["max_amount"] == 25.0
+
+
+def test_summary_runtime_error_returns_500(caplog: pytest.LogCaptureFixture) -> None:
+    with patch("main.load_sales_dataframe", side_effect=RuntimeError("db down")):
+        with caplog.at_level(logging.ERROR):
+            response = client.get("/summary")
+    assert response.status_code == 500
+    assert "db down" in response.json()["detail"]
+    assert "Summary request failed" in caplog.text
 
 
 def test_upload_file_endpoint() -> None:
@@ -122,29 +167,39 @@ def test_upload_invalid_file_format() -> None:
     assert not os.path.exists(os.path.join(UPLOAD_DIR, "invalid.txt"))
 
 
-def test_upload_rejects_duplicate_filename() -> None:
-    excel_bytes: bytes = _excel_bytes(
+def test_upload_same_filename_replaces_dataset() -> None:
+    first_bytes: bytes = _excel_bytes(
         pd.DataFrame({"Region": ["North"], "Amount": [1.0]})
     )
-    files = {
-        "file": (
-            "same.xlsx",
-            excel_bytes,
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        )
-    }
-    assert client.post("/uploadfile/", files=files).status_code == 200
-    # Rebuild file tuple because the stream was consumed.
-    files = {
-        "file": (
-            "same.xlsx",
-            excel_bytes,
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        )
-    }
-    second = client.post("/uploadfile/", files=files)
-    assert second.status_code == 400
-    assert "already exists" in second.json()["detail"]
+    second_bytes: bytes = _excel_bytes(
+        pd.DataFrame({"Region": ["South", "East"], "Amount": [2.0, 3.0]})
+    )
+    mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    assert (
+        client.post(
+            "/uploadfile/",
+            files={"file": ("same.xlsx", first_bytes, mime)},
+        ).status_code
+        == 200
+    )
+    second = client.post(
+        "/uploadfile/",
+        files={"file": ("same.xlsx", second_bytes, mime)},
+    )
+    assert second.status_code == 200
+    assert second.json()["rows_stored"] == 2
+    assert os.path.exists(os.path.join(UPLOAD_DIR, "same.xlsx"))
+
+    conn: sqlite3.Connection = sqlite3.connect(DB_NAME)
+    conn.row_factory = sqlite3.Row
+    upload_count = conn.execute("SELECT COUNT(*) FROM uploads").fetchone()[0]
+    data_count = conn.execute(f"SELECT COUNT(*) FROM {DYNAMIC_SALES_TABLE}").fetchone()[
+        0
+    ]
+    conn.close()
+
+    assert upload_count == 1
+    assert data_count == 2
 
 
 def test_upload_save_value_error_returns_400() -> None:

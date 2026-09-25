@@ -44,16 +44,14 @@ def save_uploaded_file(upload_file: UploadFile) -> str:
     Save an UploadFile into UPLOAD_DIR under a sanitized filename.
 
     Raises:
-        ValueError: Missing/unsafe filename, or file already exists.
+        ValueError: Missing/unsafe filename.
         OSError: Disk write failure.
+
+    An existing file with the same sanitized name is replaced.
     """
     safe_name: str = sanitize_filename(upload_file.filename)
     setup_upload_dir()
     file_path: str = os.path.join(UPLOAD_DIR, safe_name)
-
-    # Fail fast instead of silently overwriting another upload.
-    if os.path.exists(file_path):
-        raise ValueError(f"A file named {safe_name!r} already exists in uploads.")
 
     try:
         with open(file_path, "wb") as buffer:

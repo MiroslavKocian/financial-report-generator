@@ -6,7 +6,7 @@ select = ["E501"]
 
 [tool.pytest.ini_options]
 minversion = "7.0"
-addopts = "--cov=database --cov=file_manager --cov=excel_loader --cov=main --cov-report=term-missing --cov-report=html"
+addopts = "--cov=database --cov=file_manager --cov=excel_loader --cov=analysis --cov=main --cov-report=term-missing --cov-report=html"
 testpaths = ["tests"]
 
 [tool.coverage.report]

@@ -4,11 +4,14 @@ Educational choice: every query is visible SQL so interviewers can see
 parameter binding (?) for values and identifier validation for names.
 """
 
+import logging
 import re
 import sqlite3
 from typing import Any
 
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 DB_NAME: str = "sales_data.db"
 DYNAMIC_SALES_TABLE: str = "dynamic_sales_data"
@@ -215,3 +218,41 @@ def store_dataframe_rows(upload_id: int, dataframe: pd.DataFrame) -> int:
         insert_generic_row(DYNAMIC_SALES_TABLE, row_payload)
         inserted_count += 1
     return inserted_count
+
+
+def load_sales_dataframe() -> pd.DataFrame:
+    """
+    Read the active sales table into a DataFrame (raw SQL SELECT).
+
+    Raises:
+        ValueError: No table, no rows, or an unsafe column name.
+        RuntimeError: SQLite failed while reading rows.
+    """
+    table_name: str = validate_sql_identifier(DYNAMIC_SALES_TABLE)
+    conn: sqlite3.Connection = get_db_connection()
+    try:
+        if not _table_exists(conn, table_name):
+            raise ValueError("No sales data is stored.")
+
+        columns: list[str] = [
+            validate_sql_identifier(name)
+            for name in _existing_data_columns(conn, table_name)
+        ]
+        if not columns:
+            raise ValueError("No sales data is stored.")
+
+        columns_sql: str = ", ".join(columns)
+        try:
+            cursor: sqlite3.Cursor = conn.execute(
+                f"SELECT {columns_sql} FROM {table_name} ORDER BY id"
+            )
+            rows: list[dict[str, Any]] = [dict(row) for row in cursor.fetchall()]
+        except sqlite3.Error as exc:
+            logger.error("Failed to load sales data: %s", exc)
+            raise RuntimeError(f"Failed to load sales data: {exc}") from exc
+    finally:
+        conn.close()
+
+    if not rows:
+        raise ValueError("No sales data is stored.")
+    return pd.DataFrame(rows, columns=columns)

@@ -72,7 +72,7 @@ def test_save_uploaded_file_requires_filename() -> None:
         save_uploaded_file(fake_file)
 
 
-def test_save_uploaded_file_rejects_overwrite() -> None:
+def test_save_uploaded_file_overwrites_same_name() -> None:
     first: SimpleNamespace = SimpleNamespace(
         filename="dup.xlsx",
         file=BytesIO(b"one"),
@@ -81,9 +81,11 @@ def test_save_uploaded_file_rejects_overwrite() -> None:
         filename="dup.xlsx",
         file=BytesIO(b"two"),
     )
-    save_uploaded_file(first)
-    with pytest.raises(ValueError, match="already exists"):
-        save_uploaded_file(second)
+    path: str = save_uploaded_file(first)
+    save_uploaded_file(second)
+
+    with open(path, "rb") as handle:
+        assert handle.read() == b"two"
 
 
 def test_save_uploaded_file_wraps_oserror() -> None:
