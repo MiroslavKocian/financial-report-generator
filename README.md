@@ -6,10 +6,29 @@ Upload an Excel sales workbook, save rows in **SQLite** with **SQL in Python** (
 
 **Repository:** https://github.com/MiroslavKocian/financial-report-generator
 
+## Project folder (after clone)
+
+All paths below are relative to the folder you get after:
+
+```sh
+git clone https://github.com/MiroslavKocian/financial-report-generator.git
+cd financial-report-generator
+```
+
+That folder is the **project root**. Example on Windows if you cloned to the Desktop:
+
+`C:\Users\<YourName>\Desktop\financial-report-generator`
+
+The sample Excel file is **on your disk** (not a web address):
+
+`financial-report-generator\examples\sales_example.xlsx`
+
+(in the project root, open the `examples` folder, file name `sales_example.xlsx`).
+
 ## What this demo shows
 
-| Topic | File in git |
-|--------|-------------|
+| Topic | File in git (under project root) |
+|--------|----------------------------------|
 | Web app and routes | `main.py` |
 | JSON response models | `schemas.py` |
 | Raw SQL (no ORM) | `database.py` |
@@ -22,9 +41,10 @@ One **active dataset** at a time. Each new upload replaces the previous Excel fi
 
 ## Features
 
-- Upload `.xlsx` on the home page
+- Upload `.xlsx` using the form on the home page (file picker on your computer)
 - Invalid files are rejected **before** the old data is deleted
-- Data lives in `sales_data.db` (SQLite) and the latest file in the `uploads/` folder
+- Database file `sales_data.db` appears in the **project root** when the server starts
+- Uploaded Excel is stored in the `uploads` folder under the **project root**
 - Summary page shows `total_amount`, `min_amount`, and `max_amount`
 
 ## Stack
@@ -55,8 +75,8 @@ flowchart TD
     end
 
     subgraph storage [Storage]
-        disk[uploads/ folder]
-        sqlite[sales_data.db]
+        disk[uploads folder in project root]
+        sqlite[sales_data.db in project root]
     end
 
     home --> uploadRoute --> sanitize --> temp --> excel --> validate --> replace
@@ -79,9 +99,11 @@ flowchart TD
 - Numbers only in `amount`; at least one row
 - Extra columns (e.g. `region`) are stored too
 
-Sample: [`examples/sales_example.xlsx`](examples/sales_example.xlsx).
+You can use the included sample file `examples/sales_example.xlsx` or any workbook that follows these rules.
 
-## Pages (server must be running)
+## Pages (start the server first)
+
+Start with `python main.py` from the **project root** (see below). Then use these links in the browser:
 
 | Page | Link |
 |------|------|
@@ -89,7 +111,7 @@ Sample: [`examples/sales_example.xlsx`](examples/sales_example.xlsx).
 | Summary (JSON) | [http://127.0.0.1:8000/summary](http://127.0.0.1:8000/summary) |
 | API reference (FastAPI) | [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs) |
 
-The upload form sends the file for you when you click **Upload and Store**. You do not run any upload command in the terminal.
+On the upload page, click **Select Excel file**, pick a `.xlsx` from your PC, then **Upload and Store**. You never type a file path into the address bar.
 
 ## Prerequisites
 
@@ -100,16 +122,18 @@ The upload form sends the file for you when you click **Upload and Store**. You 
 
 ## Run locally
 
-### 1. Clone
+### 1. Clone into a folder on your PC
 
 ```sh
 git clone https://github.com/MiroslavKocian/financial-report-generator.git
 cd financial-report-generator
 ```
 
+Stay in this folder for all following steps.
+
 ### 2. Virtual environment
 
-Windows (PowerShell):
+Windows (PowerShell), still in the project root:
 
 ```powershell
 python -m venv .venv
@@ -127,18 +151,28 @@ pip install -r requirements.txt
 
 ### 3. Start server
 
+From the **same project root** folder:
+
 ```sh
 python main.py
 ```
 
-Open [http://127.0.0.1:8000](http://127.0.0.1:8000). The app creates `sales_data.db` on first start.
+Leave this terminal open. Open [http://127.0.0.1:8000](http://127.0.0.1:8000) in your browser.
+
+The file `sales_data.db` is created in the project root on first start.
 
 ### 4. Upload and summary
 
-1. On [http://127.0.0.1:8000](http://127.0.0.1:8000), select `examples/sales_example.xlsx` and click **Upload and Store**.
-2. Open [http://127.0.0.1:8000/summary](http://127.0.0.1:8000/summary).
+1. In the browser, open [http://127.0.0.1:8000](http://127.0.0.1:8000).
+2. Click **Select Excel file** (or **Browse**). In the file dialog, go to your **project root** → open the **`examples`** folder → choose **`sales_example.xlsx`**.
+3. Click **Upload and Store**.
+4. Open [http://127.0.0.1:8000/summary](http://127.0.0.1:8000/summary) to see the JSON report.
+
+You can upload any other `.xlsx` from your PC that has an `amount` column; the sample is just for a quick test.
 
 ### 5. Tests
+
+With the virtual environment active, from the **project root**:
 
 ```sh
 pytest
@@ -146,49 +180,65 @@ ruff check .
 ruff format .
 ```
 
-Pushes to GitHub run the same checks in the **Actions** tab.
+Pushes to GitHub run the same checks in the repository **Actions** tab on GitHub.
 
 ## Docker
+
+From the **project root** on your PC:
 
 ```sh
 docker compose up --build
 ```
 
-Open [http://127.0.0.1:8000](http://127.0.0.1:8000) and do steps **4** above. Container logs may show `0.0.0.0:8000`; use `127.0.0.1:8000` in the browser.
+Leave the terminal open. In the browser use [http://127.0.0.1:8000](http://127.0.0.1:8000) (not `0.0.0.0` from the logs).
 
-Stop with **Ctrl+C**, then `docker compose down`.
+For upload, use the same file picker as in step **4**: choose `sales_example.xlsx` from the **`examples`** folder inside the project you cloned on your computer.
+
+Stop with **Ctrl+C**, then:
+
+```sh
+docker compose down
+```
 
 ## Project layout
 
+Everything lives under the project root, for example:
+
 ```text
-main.py              FastAPI app
-database.py          SQLite SQL
-file_manager.py      uploads/ folder
-excel_loader.py      Excel import
-analysis.py          validation and summary
-schemas.py           API models
-templates/index.html upload page
-examples/            sample Excel
-tests/               pytest
-.github/workflows/   CI
-Dockerfile
-compose.yaml
-requirements.txt
-pyproject.toml
-AGENTS.md
+financial-report-generator/
+├── main.py
+├── database.py
+├── file_manager.py
+├── excel_loader.py
+├── analysis.py
+├── schemas.py
+├── templates/index.html
+├── examples/
+│   └── sales_example.xlsx    ← sample file for step 4
+├── tests/
+├── .github/workflows/test.yml
+├── Dockerfile
+├── compose.yaml
+├── requirements.txt
+├── pyproject.toml
+└── AGENTS.md
 ```
 
-Runtime files (not in git): `sales_data.db`, `uploads/`.
+After you run the app locally you will also see (not in git):
+
+- `sales_data.db` — in the project root  
+- `uploads/` — folder in the project root with the saved Excel file  
 
 ## Troubleshooting
 
 | Problem | Fix |
 |---------|-----|
-| Port 8000 busy | Close the other program using port 8000 |
+| Cannot find sample file | It is not a URL. In the file picker, browse to `examples\sales_example.xlsx` under your clone folder. |
+| Port 8000 busy | Close the other program using port 8000, or stop the other `python main.py` terminal. |
 | `Activate.ps1` blocked | `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` |
 | Upload fails | `.xlsx`, `amount` column, numeric values, at least one row |
-| Summary empty | Upload a file first |
-| Docker: no data after restart | Upload the Excel file again |
+| Summary empty | Complete step 4 (upload) before opening the summary link |
+| Docker: no data after restart | Upload the Excel file again from the file picker |
 
 ## Contributing
 
