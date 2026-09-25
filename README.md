@@ -181,29 +181,17 @@ pip install -r requirements.txt
 
 ### 3. Start the server
 
-Pick one (same on all platforms):
-
 ```sh
 python main.py
-# or: uvicorn main:app --host 127.0.0.1 --port 8000
-# or: uvicorn main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-`python main.py` enables auto-reload for development. Open [http://127.0.0.1:8000](http://127.0.0.1:8000).
+Open [http://127.0.0.1:8000](http://127.0.0.1:8000). On first start the app creates `sales_data.db`; `uploads/` appears when you upload a file.
 
-On first start the app creates `sales_data.db`; `uploads/` appears when you upload a file.
+### 4. Upload and summary
 
-### 4. Demo flow
-
-1. Upload `examples/sales_example.xlsx` (or any `.xlsx` with an `amount` column) on the home page.
-2. Open [http://127.0.0.1:8000/summary](http://127.0.0.1:8000/summary) for JSON.
-
-From the project root (with the server running). On Windows PowerShell use `curl.exe` instead of `curl`:
-
-```sh
-curl -F "file=@examples/sales_example.xlsx" http://127.0.0.1:8000/uploadfile/
-curl http://127.0.0.1:8000/summary
-```
+1. Open [http://127.0.0.1:8000](http://127.0.0.1:8000).
+2. Select `examples/sales_example.xlsx` and click **Upload and Store**.
+3. Open [http://127.0.0.1:8000/summary](http://127.0.0.1:8000/summary) and check JSON (`total_amount`, `min_amount`, `max_amount`).
 
 ### 5. Tests and lint
 
@@ -217,28 +205,13 @@ CI runs the same checks on every push and pull request (see `.github/workflows/t
 
 ## Docker
 
-Requires [Docker Desktop](https://www.docker.com/products/docker-desktop/) (or Docker Engine on Linux).
-
-```sh
-docker build -t financial-report-generator .
-docker run --rm -p 8000:8000 financial-report-generator
-```
-
-Browse [http://127.0.0.1:8000](http://127.0.0.1:8000). The image runs Uvicorn as non-root `appuser` on port **8000**.
-
-Optional: keep uploaded Excel files across container restarts (SQLite still lives inside the container unless you mount it):
-
-```sh
-docker run --rm -p 8000:8000 -v frg-uploads:/app/uploads financial-report-generator
-```
-
-**Compose** (build, port 8000, named volume on `/app/uploads`):
+Install [Docker Desktop](https://www.docker.com/products/docker-desktop/) (or Docker Engine on Linux), then from the project folder:
 
 ```sh
 docker compose up --build
 ```
 
-Stop with `docker compose down`.
+Open [http://127.0.0.1:8000](http://127.0.0.1:8000) and repeat steps **4. Upload and summary** above. Stop the stack with `docker compose down`.
 
 ## Project layout
 
