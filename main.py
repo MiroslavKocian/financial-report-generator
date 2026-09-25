@@ -1,11 +1,10 @@
-"""FastAPI entrypoint: routes wire file, Excel, SQLite, and summary.
+"""FastAPI entrypoint: upload Excel, store rows in SQLite, return summary.
 
-Pipeline for steps 1-2 (upload + store raw data):
-1) Persist the binary to disk under a sanitized name (same name
-   overwrites the file on disk).
+Upload pipeline:
+1) Persist bytes under a sanitized name (same name overwrites on disk).
 2) Parse Excel with pandas (openpyxl); on failure keep prior data.
-3) Replace previous dataset (other files + DB), then store the new one.
-If a later step fails, delete the saved file so uploads/ stays clean.
+3) Replace the previous dataset, then insert new rows.
+On failure after save, remove the new file and roll back metadata.
 """
 
 import logging
@@ -36,7 +35,7 @@ logger = logging.getLogger(__name__)
 
 
 def _delete_upload_metadata(upload_id: int) -> None:
-    """Remove an uploads row if a later step fails after INSERT."""
+    """Remove an uploads row when a subsequent pipeline step fails."""
     conn = get_db_connection()
     try:
         with conn:
@@ -63,16 +62,16 @@ templates: Jinja2Templates = Jinja2Templates(
 
 @app.get("/", response_class=HTMLResponse)
 async def read_root(request: Request) -> HTMLResponse:
-    """Serve the Excel upload form (step 1 UI)."""
+    """Serve the Excel upload form."""
     return templates.TemplateResponse(request, "index.html")
 
 
 @app.post("/uploadfile/")
 def create_upload_file(file: UploadFile = File(...)) -> dict:  # noqa: B008
     """
-    Accept an Excel upload and store raw rows in SQLite (steps 1-2).
+    Accept an Excel upload and store raw rows in SQLite.
 
-    Only one dataset is active: a valid new file replaces prior disk
+    One active dataset: a valid new file replaces prior disk
     files and DB rows, including when the filename is unchanged.
     """
     file_location: str | None = None
@@ -129,5 +128,5 @@ def read_summary() -> dict:
 if __name__ == "__main__":
     import uvicorn
 
-    # reload=True is for local learning/debug; disable in production.
+    # reload=True for local development.
     uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)

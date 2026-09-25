@@ -1,8 +1,4 @@
-"""SQLite access with hand-written raw SQL (no ORM).
-
-Educational choice: every query is visible SQL so interviewers can see
-parameter binding (?) for values and identifier validation for names.
-"""
+"""SQLite access with hand-written SQL and validated identifiers."""
 
 import logging
 import re

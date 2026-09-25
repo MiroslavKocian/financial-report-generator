@@ -1,8 +1,4 @@
-"""Disk storage for uploaded Excel files.
-
-Interview note: never trust client-provided filenames. A value like
-"../../secret.xlsx" must not escape the uploads directory.
-"""
+"""Disk storage for uploaded Excel files with filename sanitization."""
 
 import os
 import shutil
@@ -63,7 +59,7 @@ def save_uploaded_file(upload_file: UploadFile) -> str:
 
 
 def delete_uploaded_file(file_path: str) -> None:
-    """Best-effort cleanup when a later pipeline step fails."""
+    """Best-effort cleanup when a subsequent pipeline step fails."""
     try:
         if os.path.exists(file_path):
             os.remove(file_path)

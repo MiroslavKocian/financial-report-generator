@@ -1,11 +1,4 @@
-"""Small pandas summary of the stored sales table.
-
-Step 3 stays narrow on purpose:
-- total, minimum, and maximum of the required `amount` column
-
-No period logic, percent change, or anomaly rules — each adds edge
-cases that are easy to get wrong on small teaching files.
-"""
+"""Pandas summary of stored sales: total, minimum, and maximum amount."""
 
 import logging
 

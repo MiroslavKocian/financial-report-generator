@@ -2,29 +2,26 @@
 
 [![Tests](https://github.com/MiroslavKocian/financial-report-generator/actions/workflows/test.yml/badge.svg)](https://github.com/MiroslavKocian/financial-report-generator/actions/workflows/test.yml)
 
-A small **educational** web app: upload one Excel sales file, store rows in **SQLite with raw SQL**, and read a **pandas** summary over HTTP. Built with **FastAPI**, **Jinja2**, and **Docker** — no ORM, no paid APIs.
+Upload an Excel sales file, store rows in **SQLite** with **raw SQL**, and generate a **pandas** summary report over **FastAPI**. The UI uses **Jinja2**; the stack includes **Docker** and **GitHub Actions** CI.
 
-## What it does
+## Features
 
-| Step | Status | Description |
-|------|--------|-------------|
-| 1–2 | Done | Upload `.xlsx`, sanitize filename, replace previous dataset, persist to disk + DB |
-| 3 | Done | `GET /summary` — total, min, and max of the `amount` column |
-| 4–6 | Out of scope | LLM narrative, PDF export, dashboards (see [Scope](#scope)) |
+- **Upload** `.xlsx` files with sanitized filenames and a single active dataset on disk and in the database
+- **Persist** each row via parameterized SQL (`uploads` metadata + `dynamic_sales_data`)
+- **Report** via `GET /summary`: `total_amount`, `min_amount`, and `max_amount` for the `amount` column
 
-**One active dataset:** a successful upload clears older files (except the new one on disk) and all prior DB rows. Uploading again with the **same filename** overwrites the file and refreshes the data.
+Uploading again with the **same filename** overwrites the file and refreshes stored rows.
 
 ## Stack
 
 - **Python 3.11** — FastAPI, Uvicorn, pandas, openpyxl
-- **SQLite** — hand-written SQL only (`database.py`)
-- **HTML** — simple upload form (`templates/index.html`)
-- **pytest** — 100% coverage on app modules (`pyproject.toml`)
+- **SQLite** — `database.py`
+- **HTML** — `templates/index.html`
+- **pytest** — coverage on `database`, `file_manager`, `excel_loader`, `analysis`, `main`
 
 ## Architecture
 
-The app keeps **one active dataset**. Upload and summary are separate HTTP requests; the
-“report” today is a **JSON summary** (`total`, `min`, `max` on `amount`), not a PDF.
+One active dataset. Upload and summary are separate requests; the report is JSON from `GET /summary`.
 
 ```mermaid
 flowchart TD
@@ -79,23 +76,23 @@ flowchart TD
 |-------|--------|----------------|
 | Ingest | `file_manager` | Sanitize filename, write bytes to `uploads/` (same name replaces file) |
 | Parse | `excel_loader` | Read `.xlsx`, normalize headers (`Amount` → `amount`) |
-| Replace | `main` + `database` | On valid parse only: remove old uploads, `DROP` sales data, new `uploads` row + rows in `dynamic_sales_data` |
-| Report | `analysis` | `SELECT` active rows → `total_amount`, `min_amount`, `max_amount` |
+| Replace | `main` + `database` | After a valid parse: remove old uploads, refresh sales table and metadata |
+| Report | `analysis` | Load rows → `total_amount`, `min_amount`, `max_amount` |
 
-If Excel parsing fails **before** the replace step, the previous dataset on disk and in SQLite is left unchanged.
+If parsing fails before the replace step, the previous dataset remains in place.
 
 ## Excel format
 
-- File type: **`.xlsx`** (read via openpyxl).
-- Required column: **`amount`** (header is normalized, e.g. `Amount` → `amount`). Values must be numeric.
-- Other columns (e.g. `region`) are stored but not used in the summary.
+- File type: **`.xlsx`** (openpyxl).
+- Required column: **`amount`** (headers normalized, e.g. `Amount` → `amount`). Numeric values only.
+- Additional columns (e.g. `region`) are stored with each row.
 - Duplicate headers after normalization are rejected.
 
 ## API
 
 ### `GET /`
 
-HTML upload form and link to the summary.
+Upload form and link to the summary.
 
 ### `POST /uploadfile/`
 
@@ -116,7 +113,7 @@ HTML upload form and link to the summary.
 
 ### `GET /summary`
 
-**200 example** (after a successful upload):
+**200 example:**
 
 ```json
 {
@@ -129,7 +126,7 @@ HTML upload form and link to the summary.
 
 **400** — no data stored yet.
 
-Interactive docs: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs) when the server is running.
+OpenAPI UI: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs) while the server is running.
 
 ## Run locally
 
@@ -142,7 +139,7 @@ python main.py
 ```
 
 Open [http://127.0.0.1:8000](http://127.0.0.1:8000).  
-`main.py` uses `reload=True` for local development.
+`main.py` runs Uvicorn with `reload=True` for development.
 
 ### Tests
 
@@ -150,13 +147,11 @@ Open [http://127.0.0.1:8000](http://127.0.0.1:8000).
 pytest
 ```
 
-Coverage is configured for `database`, `file_manager`, `excel_loader`, `analysis`, and `main`.
-
 ### CI
 
-On every **push** and **pull request**, GitHub Actions runs `pytest` (see `.github/workflows/test.yml`).
+Every **push** and **pull request** runs `pytest` (`.github/workflows/test.yml`).
 
-### Lint (line length)
+### Lint
 
 ```powershell
 ruff check .
@@ -169,8 +164,6 @@ docker build -t financial-report-generator .
 docker run --rm -p 8000:8000 financial-report-generator
 ```
 
-Uploaded files and `sales_data.db` live inside the container unless you mount volumes; for learning, local runs are usually enough.
-
 ## Project layout
 
 ```text
@@ -181,18 +174,5 @@ analysis.py       # summarize_sales() — total / min / max
 file_manager.py   # uploads/ directory, sanitize, replace on same name
 templates/        # Upload UI
 tests/            # pytest suite
-AGENTS.md         # Conventions for contributors and AI agents
+AGENTS.md         # Contributor and agent conventions
 ```
-
-## Scope
-
-This repo is intentionally small:
-
-- **In:** REST API, raw SQL, pandas basics, file safety, tests, Docker.
-- **Out:** LLM-generated reports, PDF layout, charts, multi-tenant auth, production hardening.
-
-That keeps the project easy to explain in an interview and avoids edge cases that need product rules (period logic, anomalies, percent change, etc.).
-
-## License
-
-Educational / portfolio use. Add a license file if you publish the repo publicly.
