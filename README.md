@@ -2,8 +2,6 @@
 
 [![Tests](https://github.com/MiroslavKocian/financial-report-generator/actions/workflows/test.yml/badge.svg)](https://github.com/MiroslavKocian/financial-report-generator/actions/workflows/test.yml)
 
-**Repository:** [github.com/MiroslavKocian/financial-report-generator](https://github.com/MiroslavKocian/financial-report-generator)
-
 Upload an Excel sales workbook, persist rows in **SQLite** with **hand-written SQL**, and read a **JSON summary** (`total_amount`, `min_amount`, `max_amount`) from **FastAPI**. The browser UI is a small **Jinja2** page; the project ships with **pytest** (100% coverage on core modules), **Ruff**, **Docker**, and **GitHub Actions**.
 
 ## What this demo shows
@@ -152,86 +150,53 @@ HTML upload form, link to `/summary` and `/docs`.
 - **Python 3.11** ([python.org](https://www.python.org/downloads/)) or Docker Desktop
 - **Git** (to clone)
 - On Windows PowerShell: if `Activate.ps1` is blocked, run  
-  `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once (or use `cmd` / WSL for bash steps below)
+  `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once
 
 ## Run locally
 
 ### 1. Clone and enter the project
 
-```powershell
+```sh
 git clone https://github.com/MiroslavKocian/financial-report-generator.git
 cd financial-report-generator
 ```
 
-```bash
-git clone https://github.com/MiroslavKocian/financial-report-generator.git
-cd financial-report-generator
-```
+### 2. Virtual environment and dependencies
 
-### 2. Create a virtual environment and install dependencies
-
-**Windows (PowerShell):**
-
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-```
-
-**macOS / Linux (bash):**
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-```
+| Platform | Commands |
+|----------|----------|
+| Windows (PowerShell) | `python -m venv .venv` → `.\.venv\Scripts\Activate.ps1` → `pip install -r requirements.txt` |
+| macOS / Linux | `python3 -m venv .venv` → `source .venv/bin/activate` → `pip install -r requirements.txt` |
 
 ### 3. Start the server
 
-**Option A — `main.py` (reload for development):**
+Pick one (same on all platforms):
 
-```powershell
+```sh
 python main.py
+# or: uvicorn main:app --host 127.0.0.1 --port 8000
+# or: uvicorn main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-**Option B — Uvicorn directly (no reload):**
+`python main.py` enables auto-reload for development. Open [http://127.0.0.1:8000](http://127.0.0.1:8000).
 
-```powershell
-uvicorn main:app --host 127.0.0.1 --port 8000
-```
+On first start the app creates `sales_data.db`; `uploads/` appears when you upload a file.
 
-**Option C — Uvicorn with reload:**
+### 4. Demo flow
 
-```powershell
-uvicorn main:app --host 127.0.0.1 --port 8000 --reload
-```
-
-Open [http://127.0.0.1:8000](http://127.0.0.1:8000).
-
-On first start the app creates `sales_data.db` and the `uploads/` directory (when you upload).
-
-### 4. Try the demo flow
-
-1. Open the home page and upload `examples/sales_example.xlsx`, or any `.xlsx` with an `amount` column.
+1. Upload `examples/sales_example.xlsx` (or any `.xlsx` with an `amount` column) on the home page.
 2. Open [http://127.0.0.1:8000/summary](http://127.0.0.1:8000/summary) for JSON.
 
-**curl (bash):**
+From the project root (with the server running), use `curl` — on Windows PowerShell use `curl.exe` instead of `curl`:
 
-```bash
+```sh
 curl -F "file=@examples/sales_example.xlsx" http://127.0.0.1:8000/uploadfile/
 curl http://127.0.0.1:8000/summary
 ```
 
-**PowerShell:**
-
-```powershell
-curl.exe -F "file=@examples/sales_example.xlsx" http://127.0.0.1:8000/uploadfile/
-curl.exe http://127.0.0.1:8000/summary
-```
-
 ### 5. Tests and lint
 
-```powershell
+```sh
 pytest
 ruff check .
 ruff format .
@@ -241,32 +206,28 @@ CI runs the same checks on every push and pull request (see `.github/workflows/t
 
 ## Docker
 
-### Build and run (single container)
+Requires [Docker Desktop](https://www.docker.com/products/docker-desktop/) (or Docker Engine on Linux).
 
-```powershell
+```sh
 docker build -t financial-report-generator .
 docker run --rm -p 8000:8000 financial-report-generator
 ```
 
-Browse [http://127.0.0.1:8000](http://127.0.0.1:8000).
+Browse [http://127.0.0.1:8000](http://127.0.0.1:8000). The image runs Uvicorn as non-root `appuser` on port **8000**.
 
-The image runs Uvicorn as non-root user `appuser` on port **8000**.
+Optional: keep uploaded Excel files across container restarts (SQLite still lives inside the container unless you mount it):
 
-**Persist uploads across container restarts** (optional):
-
-```powershell
+```sh
 docker run --rm -p 8000:8000 -v frg-uploads:/app/uploads financial-report-generator
 ```
 
-SQLite (`sales_data.db`) lives inside the container filesystem unless you mount a volume for `/app` or the database file explicitly.
+**Compose** (build, port 8000, named volume on `/app/uploads`):
 
-### Docker Compose
-
-```powershell
+```sh
 docker compose up --build
 ```
 
-`compose.yaml` maps port **8000** and mounts a named volume on `/app/uploads` so uploaded Excel files survive restarts. Stop with `docker compose down`.
+Stop with `docker compose down`.
 
 ## Project layout
 
