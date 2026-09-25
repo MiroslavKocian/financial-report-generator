@@ -15,9 +15,9 @@ def test_normalize_column_name() -> None:
 
 def test_load_excel_dataframe(tmp_path: Path) -> None:
     source: Path = tmp_path / "sales.xlsx"
-    pd.DataFrame(
-        {"Region": ["North"], "Amount": [100]}
-    ).to_excel(source, index=False, engine="openpyxl")
+    pd.DataFrame({"Region": ["North"], "Amount": [100]}).to_excel(
+        source, index=False, engine="openpyxl"
+    )
 
     dataframe: pd.DataFrame = load_excel_dataframe(source)
 

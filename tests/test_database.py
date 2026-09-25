@@ -88,8 +88,7 @@ def test_insert_generic_row() -> None:
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute(
-        "SELECT product_name, price, in_stock "
-        "FROM test_products WHERE id = ?",
+        "SELECT product_name, price, in_stock FROM test_products WHERE id = ?",
         (row_id,),
     )
     row: sqlite3.Row | None = cursor.fetchone()
@@ -114,18 +113,14 @@ def test_ensure_dynamic_sales_table_schema_mismatch() -> None:
 
 def test_store_dataframe_rows() -> None:
     upload_id: int = save_upload_metadata("rows.xlsx")
-    dataframe: pd.DataFrame = pd.DataFrame(
-        {"region": ["North"], "amount": [10.5]}
-    )
+    dataframe: pd.DataFrame = pd.DataFrame({"region": ["North"], "amount": [10.5]})
 
     count: int = store_dataframe_rows(upload_id, dataframe)
     assert count == 1
 
     conn: sqlite3.Connection = get_db_connection()
     cursor: sqlite3.Cursor = conn.cursor()
-    cursor.execute(
-        f"SELECT region, amount, upload_id FROM {DYNAMIC_SALES_TABLE}"
-    )
+    cursor.execute(f"SELECT region, amount, upload_id FROM {DYNAMIC_SALES_TABLE}")
     row: sqlite3.Row | None = cursor.fetchone()
     conn.close()
 
@@ -151,9 +146,7 @@ def test_clear_stored_upload_data_drops_sales_and_uploads() -> None:
     clear_stored_upload_data()
 
     conn: sqlite3.Connection = get_db_connection()
-    uploads_count: int = conn.execute(
-        "SELECT COUNT(*) FROM uploads"
-    ).fetchone()[0]
+    uploads_count: int = conn.execute("SELECT COUNT(*) FROM uploads").fetchone()[0]
     table_row = conn.execute(
         """
         SELECT 1 FROM sqlite_master

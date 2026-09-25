@@ -125,9 +125,7 @@ def ensure_dynamic_sales_table(column_names: list[str]) -> None:
     new workbook may introduce different columns. This check remains a
     safety net if clear was skipped.
     """
-    safe_columns: list[str] = [
-        validate_sql_identifier(name) for name in column_names
-    ]
+    safe_columns: list[str] = [validate_sql_identifier(name) for name in column_names]
     table_name: str = validate_sql_identifier(DYNAMIC_SALES_TABLE)
 
     conn: sqlite3.Connection = get_db_connection()
@@ -142,9 +140,7 @@ def ensure_dynamic_sales_table(column_names: list[str]) -> None:
                 )
             return
 
-        col_defs: str = ", ".join(
-            f"{column} TEXT" for column in safe_columns
-        )
+        col_defs: str = ", ".join(f"{column} TEXT" for column in safe_columns)
         with conn:
             # Identifiers above were validated; values stay parameterized.
             conn.execute(f"""
@@ -170,9 +166,7 @@ def insert_generic_row(table_name: str, row_data: dict[str, Any]) -> int:
     if not row_data:
         raise ValueError("row_data must not be empty.")
 
-    safe_columns: list[str] = [
-        validate_sql_identifier(column) for column in row_data
-    ]
+    safe_columns: list[str] = [validate_sql_identifier(column) for column in row_data]
     placeholders: str = ", ".join("?" for _ in safe_columns)
     columns_sql: str = ", ".join(safe_columns)
     values: tuple[Any, ...] = tuple(row_data[col] for col in safe_columns)

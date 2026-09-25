@@ -75,8 +75,7 @@ def test_upload_file_endpoint() -> None:
             "file": (
                 filename,
                 excel_bytes,
-                "application/vnd.openxmlformats-officedocument."
-                "spreadsheetml.sheet",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             )
         },
     )
@@ -84,9 +83,7 @@ def test_upload_file_endpoint() -> None:
     assert response.status_code == 200
     json_response: dict = response.json()
     assert json_response["filename"] == filename
-    assert json_response["status"] == (
-        "File uploaded and raw data stored via raw SQL"
-    )
+    assert json_response["status"] == ("File uploaded and raw data stored via raw SQL")
     assert isinstance(json_response["file_id"], int)
     assert json_response["rows_stored"] == 2
     assert os.path.exists(os.path.join(UPLOAD_DIR, filename))
@@ -101,8 +98,7 @@ def test_upload_file_endpoint() -> None:
     )
     upload_row = cursor.fetchone()
     cursor.execute(
-        f"SELECT region, amount, upload_id FROM {DYNAMIC_SALES_TABLE} "
-        "ORDER BY id"
+        f"SELECT region, amount, upload_id FROM {DYNAMIC_SALES_TABLE} ORDER BY id"
     )
     data_rows = cursor.fetchall()
     conn.close()
@@ -134,8 +130,7 @@ def test_upload_rejects_duplicate_filename() -> None:
         "file": (
             "same.xlsx",
             excel_bytes,
-            "application/vnd.openxmlformats-officedocument."
-            "spreadsheetml.sheet",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
     }
     assert client.post("/uploadfile/", files=files).status_code == 200
@@ -144,8 +139,7 @@ def test_upload_rejects_duplicate_filename() -> None:
         "file": (
             "same.xlsx",
             excel_bytes,
-            "application/vnd.openxmlformats-officedocument."
-            "spreadsheetml.sheet",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
     }
     second = client.post("/uploadfile/", files=files)
@@ -195,8 +189,7 @@ def test_upload_store_value_error_cleans_metadata() -> None:
                 "file": (
                     "ok.xlsx",
                     excel_bytes,
-                    "application/vnd.openxmlformats-officedocument."
-                    "spreadsheetml.sheet",
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 )
             },
         )
@@ -225,8 +218,7 @@ def test_upload_store_runtime_error_returns_500() -> None:
                 "file": (
                     "ok.xlsx",
                     excel_bytes,
-                    "application/vnd.openxmlformats-officedocument."
-                    "spreadsheetml.sheet",
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 )
             },
         )
@@ -237,16 +229,11 @@ def test_upload_store_runtime_error_returns_500() -> None:
 
 def test_upload_replaces_previous_dataset() -> None:
     """A second valid file wipes prior disk file and DB rows."""
-    first = _excel_bytes(
-        pd.DataFrame({"Region": ["North"], "Amount": [1.0]})
-    )
+    first = _excel_bytes(pd.DataFrame({"Region": ["North"], "Amount": [1.0]}))
     second = _excel_bytes(
         pd.DataFrame({"Region": ["South", "East"], "Amount": [2.0, 3.0]})
     )
-    mime = (
-        "application/vnd.openxmlformats-officedocument."
-        "spreadsheetml.sheet"
-    )
+    mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     assert (
         client.post(
             "/uploadfile/",
@@ -268,12 +255,9 @@ def test_upload_replaces_previous_dataset() -> None:
 
     conn: sqlite3.Connection = sqlite3.connect(DB_NAME)
     conn.row_factory = sqlite3.Row
-    upload_rows = conn.execute(
-        "SELECT filename FROM uploads ORDER BY id"
-    ).fetchall()
+    upload_rows = conn.execute("SELECT filename FROM uploads ORDER BY id").fetchall()
     data_rows = conn.execute(
-        f"SELECT region, amount FROM {DYNAMIC_SALES_TABLE} "
-        "ORDER BY id"
+        f"SELECT region, amount FROM {DYNAMIC_SALES_TABLE} ORDER BY id"
     ).fetchall()
     conn.close()
 
@@ -286,16 +270,9 @@ def test_upload_replaces_previous_dataset() -> None:
 
 def test_upload_replaces_with_different_schema() -> None:
     """Replace also allows a new workbook with different columns."""
-    first = _excel_bytes(
-        pd.DataFrame({"Region": ["North"], "Amount": [1.0]})
-    )
-    second = _excel_bytes(
-        pd.DataFrame({"Product": ["Widget"], "Price": [9.5]})
-    )
-    mime = (
-        "application/vnd.openxmlformats-officedocument."
-        "spreadsheetml.sheet"
-    )
+    first = _excel_bytes(pd.DataFrame({"Region": ["North"], "Amount": [1.0]}))
+    second = _excel_bytes(pd.DataFrame({"Product": ["Widget"], "Price": [9.5]}))
+    mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     assert (
         client.post(
             "/uploadfile/",
@@ -312,12 +289,8 @@ def test_upload_replaces_with_different_schema() -> None:
 
     conn: sqlite3.Connection = sqlite3.connect(DB_NAME)
     conn.row_factory = sqlite3.Row
-    row = conn.execute(
-        f"SELECT product, price FROM {DYNAMIC_SALES_TABLE}"
-    ).fetchone()
-    uploads_count = conn.execute(
-        "SELECT COUNT(*) FROM uploads"
-    ).fetchone()[0]
+    row = conn.execute(f"SELECT product, price FROM {DYNAMIC_SALES_TABLE}").fetchone()
+    uploads_count = conn.execute("SELECT COUNT(*) FROM uploads").fetchone()[0]
     conn.close()
 
     assert uploads_count == 1
@@ -327,13 +300,8 @@ def test_upload_replaces_with_different_schema() -> None:
 
 def test_upload_invalid_second_file_keeps_previous_data() -> None:
     """A bad second upload must not wipe the first successful dataset."""
-    first = _excel_bytes(
-        pd.DataFrame({"Region": ["North"], "Amount": [1.0]})
-    )
-    mime = (
-        "application/vnd.openxmlformats-officedocument."
-        "spreadsheetml.sheet"
-    )
+    first = _excel_bytes(pd.DataFrame({"Region": ["North"], "Amount": [1.0]}))
+    mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     assert (
         client.post(
             "/uploadfile/",
@@ -352,12 +320,10 @@ def test_upload_invalid_second_file_keeps_previous_data() -> None:
 
     conn: sqlite3.Connection = sqlite3.connect(DB_NAME)
     conn.row_factory = sqlite3.Row
-    uploads_count = conn.execute(
-        "SELECT COUNT(*) FROM uploads"
-    ).fetchone()[0]
-    data_count = conn.execute(
-        f"SELECT COUNT(*) FROM {DYNAMIC_SALES_TABLE}"
-    ).fetchone()[0]
+    uploads_count = conn.execute("SELECT COUNT(*) FROM uploads").fetchone()[0]
+    data_count = conn.execute(f"SELECT COUNT(*) FROM {DYNAMIC_SALES_TABLE}").fetchone()[
+        0
+    ]
     conn.close()
 
     assert uploads_count == 1

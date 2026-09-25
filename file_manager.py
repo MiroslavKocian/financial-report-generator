@@ -53,9 +53,7 @@ def save_uploaded_file(upload_file: UploadFile) -> str:
 
     # Fail fast instead of silently overwriting another upload.
     if os.path.exists(file_path):
-        raise ValueError(
-            f"A file named {safe_name!r} already exists in uploads."
-        )
+        raise ValueError(f"A file named {safe_name!r} already exists in uploads.")
 
     try:
         with open(file_path, "wb") as buffer:
@@ -86,9 +84,7 @@ def clear_upload_dir(*, keep_path: str | None = None) -> None:
     if not os.path.exists(UPLOAD_DIR):
         return
 
-    keep_abs: str | None = (
-        os.path.abspath(keep_path) if keep_path else None
-    )
+    keep_abs: str | None = os.path.abspath(keep_path) if keep_path else None
     for name in os.listdir(UPLOAD_DIR):
         path: str = os.path.join(UPLOAD_DIR, name)
         if not os.path.isfile(path):
@@ -98,6 +94,4 @@ def clear_upload_dir(*, keep_path: str | None = None) -> None:
         try:
             os.remove(path)
         except OSError as exc:
-            raise OSError(
-                f"Failed to remove previous upload {path}: {exc}"
-            ) from exc
+            raise OSError(f"Failed to remove previous upload {path}: {exc}") from exc
