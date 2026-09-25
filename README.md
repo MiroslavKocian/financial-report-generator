@@ -211,7 +211,15 @@ Install [Docker Desktop](https://www.docker.com/products/docker-desktop/) (or Do
 docker compose up --build
 ```
 
-Open [http://127.0.0.1:8000](http://127.0.0.1:8000) and repeat steps **4. Upload and summary** above. Stop the stack with `docker compose down`.
+Leave this terminal open while you use the app. Logs may show `Uvicorn running on http://0.0.0.0:8000` **inside the container**; on your PC open the app at [http://127.0.0.1:8000](http://127.0.0.1:8000) or [http://localhost:8000](http://localhost:8000) (`compose.yaml` maps host port **8000** to the container).
+
+Repeat steps **4. Upload and summary** in the browser. When you see `GET / HTTP/1.1" 200` in the log, the page loaded correctly.
+
+Stop the stack with **Ctrl+C** in that terminal, then:
+
+```sh
+docker compose down
+```
 
 ## Project layout
 
