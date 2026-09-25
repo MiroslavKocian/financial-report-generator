@@ -1,5 +1,7 @@
 # Financial Report Generator
 
+[![Tests](https://github.com/MiroslavKocian/financial-report-generator/actions/workflows/test.yml/badge.svg)](https://github.com/MiroslavKocian/financial-report-generator/actions/workflows/test.yml)
+
 A small **educational** web app: upload one Excel sales file, store rows in **SQLite with raw SQL**, and read a **pandas** summary over HTTP. Built with **FastAPI**, **Jinja2**, and **Docker** — no ORM, no paid APIs.
 
 ## What it does
@@ -86,6 +88,10 @@ pytest
 ```
 
 Coverage is configured for `database`, `file_manager`, `excel_loader`, `analysis`, and `main`.
+
+### CI
+
+On every **push** and **pull request**, GitHub Actions runs `pytest` (see `.github/workflows/test.yml`).
 
 ### Lint (line length)
 
