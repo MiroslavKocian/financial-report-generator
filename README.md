@@ -11,7 +11,7 @@ Upload an Excel sales workbook, persist rows in **SQLite** with **hand-written S
 | REST API + OpenAPI | `main.py`, `/docs` |
 | Raw SQL (no ORM) | `database.py` |
 | File upload safety | `file_manager.py` (`basename`, temp file, atomic publish) |
-| Excel → pandas | `excel_loader.py` |
+| Excel to pandas | `excel_loader.py` |
 | Validation + reporting | `analysis.py` |
 | Typed API responses | `schemas.py` |
 | Automated quality gate | `.github/workflows/test.yml` |
@@ -85,7 +85,7 @@ flowchart TD
 |------|--------|----------------|
 | Sanitize | `file_manager` | Strip path segments; reject empty names |
 | Stage | `file_manager` | Write bytes to a `.part` file under `uploads/` |
-| Parse | `excel_loader` | Read `.xlsx`; normalize headers (`Amount` → `amount`) |
+| Parse | `excel_loader` | Read `.xlsx`; normalize headers (e.g. `Amount` to `amount`) |
 | Validate | `analysis` | Require numeric `amount` on every row |
 | Replace DB | `database` | Single transaction: drop old table, new `uploads` row, insert rows |
 | Publish file | `file_manager` | `os.replace` to final name; delete other files in `uploads/` |
@@ -163,10 +163,21 @@ cd financial-report-generator
 
 ### 2. Virtual environment and dependencies
 
-| Platform | Commands |
-|----------|----------|
-| Windows (PowerShell) | `python -m venv .venv` → `.\.venv\Scripts\Activate.ps1` → `pip install -r requirements.txt` |
-| macOS / Linux | `python3 -m venv .venv` → `source .venv/bin/activate` → `pip install -r requirements.txt` |
+Windows (PowerShell):
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+```
+
+macOS / Linux:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
 
 ### 3. Start the server
 
@@ -187,7 +198,7 @@ On first start the app creates `sales_data.db`; `uploads/` appears when you uplo
 1. Upload `examples/sales_example.xlsx` (or any `.xlsx` with an `amount` column) on the home page.
 2. Open [http://127.0.0.1:8000/summary](http://127.0.0.1:8000/summary) for JSON.
 
-From the project root (with the server running), use `curl` — on Windows PowerShell use `curl.exe` instead of `curl`:
+From the project root (with the server running). On Windows PowerShell use `curl.exe` instead of `curl`:
 
 ```sh
 curl -F "file=@examples/sales_example.xlsx" http://127.0.0.1:8000/uploadfile/
