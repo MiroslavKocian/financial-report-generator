@@ -140,6 +140,8 @@ flowchart TD
 | `schemas.py` | Shape of the JSON responses |
 | `templates/index.html` | Upload page |
 
+For a longer walkthrough (request flow, key functions per module, and design notes), see [docs/architecture.md](docs/architecture.md).
+
 Files created while the app runs (not stored in Git): `sales_data.db` (the database) and the `uploads` folder (the latest uploaded Excel file). Both appear in the project folder.
 
 ## Tests
@@ -171,6 +173,7 @@ financial-report-generator/
 ├── examples/
 │   └── sales_example.xlsx
 ├── docs/
+│   ├── architecture.md
 │   └── images/
 ├── tests/
 ├── .github/workflows/test.yml
