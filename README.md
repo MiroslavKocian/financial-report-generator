@@ -58,6 +58,9 @@ Keep this terminal window open. The app runs as long as it is open. To stop it, 
 ### 4. Use the app
 
 1. Open [http://127.0.0.1:8000](http://127.0.0.1:8000) in your browser.
+
+   ![Upload page at http://127.0.0.1:8000](docs/images/04-upload-page.jpg)
+
 2. Under **Select Excel file**, click the file button and pick the sample file `sales_example.xlsx`. It is in the `examples` folder inside the project folder you downloaded in step 1.
 3. Click **Upload and Store**. The browser shows a short confirmation, for example:
 
@@ -65,15 +68,21 @@ Keep this terminal window open. The app runs as long as it is open. To stop it, 
    {"filename": "sales_example.xlsx", "file_id": 1, "rows_stored": 2, "status": "File uploaded and raw data stored via raw SQL"}
    ```
 
+   ![Upload confirmation JSON](docs/images/04-upload-response.jpg)
+
 4. Open [http://127.0.0.1:8000/summary](http://127.0.0.1:8000/summary). For the sample file you will see:
 
    ```json
    {"row_count": 2, "total_amount": 35.0, "min_amount": 10.0, "max_amount": 25.0}
    ```
 
+   ![Summary JSON for the sample file](docs/images/04-summary.jpg)
+
 Every new upload replaces the previous data. Uploading a file with the same name again is allowed.
 
 FastAPI also generates an interactive API page at [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs), where you can see and try every endpoint.
+
+![FastAPI interactive API docs at /docs](docs/images/04-api-docs.jpg)
 
 ## Run with Docker
 
@@ -161,6 +170,8 @@ financial-report-generator/
 │   └── index.html
 ├── examples/
 │   └── sales_example.xlsx
+├── docs/
+│   └── images/
 ├── tests/
 ├── .github/workflows/test.yml
 ├── Dockerfile
