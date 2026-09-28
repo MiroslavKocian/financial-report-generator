@@ -4,7 +4,7 @@
 
 A small web app: you upload an Excel file with sales data, the app saves every row into a SQLite database, and a summary page shows the total, minimum, and maximum `amount`.
 
-Built with Python 3.11, FastAPI, pandas, and SQLite. All database queries are plain SQL written by hand (no ORM).
+Built with Python 3.11, FastAPI, pandas, and SQLite. All database queries are plain SQL written by hand (no Object–relational mapping).
 
 ## Requirements
 
