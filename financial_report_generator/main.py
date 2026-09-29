@@ -146,13 +146,11 @@ def read_grouped_report(group_by: str | None = None) -> GroupedReportResponse:
 
 
 @app.get("/report/export.xlsx")
-def download_report(group_by: str | None = None) -> Response:
-    """Download summary and grouped totals as an Excel workbook."""
+def download_report() -> Response:
+    """Download the sales summary as an Excel workbook."""
     try:
-        frame = load_sales_dataframe()
         payload: bytes = build_report_workbook(
-            summarize_sales(frame),
-            grouped_sales(frame, group_by or None),
+            summarize_sales(load_sales_dataframe()),
         )
     except (ValueError, RuntimeError) as exc:
         raise _report_http_error(exc) from exc

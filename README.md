@@ -71,7 +71,7 @@ Keep this terminal window open. The app runs as long as it is open. To stop it, 
 3. Click **Upload and Store**. The browser shows a short confirmation, for example:
 
    ```json
-   {"filename": "sales_example.xlsx", "file_id": 1, "rows_stored": 2, "status": "File uploaded and raw data stored via raw SQL"}
+   {"filename": "sales_example.xlsx", "file_id": 1, "rows_stored": 4, "status": "File uploaded and raw data stored via raw SQL"}
    ```
 
    ![Upload confirmation JSON](docs/images/04-upload-response.jpg)
@@ -79,13 +79,13 @@ Keep this terminal window open. The app runs as long as it is open. To stop it, 
 4. Open [http://127.0.0.1:8000/summary](http://127.0.0.1:8000/summary). For the sample file you will see money as two-decimal strings (not binary floats):
 
    ```json
-   {"row_count": 2, "total_amount": "35.00", "min_amount": "10.00", "max_amount": "25.00"}
+   {"row_count": 4, "total_amount": "41.00", "min_amount": "1.00", "max_amount": "25.00"}
    ```
 
    ![Summary JSON for the sample file](docs/images/04-summary.jpg)
 
-5. Open [http://127.0.0.1:8000/report/grouped](http://127.0.0.1:8000/report/grouped). The sample file is grouped by `region` (North 10.00, South 25.00). Pass `?group_by=product` to group by product instead.
-6. Download the same totals as Excel: [http://127.0.0.1:8000/report/export.xlsx](http://127.0.0.1:8000/report/export.xlsx). The workbook has a **Summary** sheet and a **Grouped** sheet. The upload page links to both reports.
+5. Open [http://127.0.0.1:8000/report/grouped](http://127.0.0.1:8000/report/grouped). The sample file is grouped by `region` (North 11.00, South 30.00). Use the **by product** link on the upload page, or `?group_by=product`, for product A 35.00 and B 6.00.
+6. Download the summary as Excel: [http://127.0.0.1:8000/report/export.xlsx](http://127.0.0.1:8000/report/export.xlsx). The workbook has one **Summary** sheet (same numbers as `/summary`).
 
 Every new upload replaces the previous data. Uploading a file with the same name again is allowed.
 
@@ -133,7 +133,7 @@ flowchart TD
     db --> publish[Keep the file under its real name]
     summary[Summary and grouped report] --> query[Read rows from SQLite]
     query --> totals[Compute totals with Decimal]
-    totals --> export[Excel workbook with Summary and Grouped sheets]
+    totals --> export[Excel workbook with Summary sheet]
 ```
 
 1. The uploaded file is first saved as a temporary copy.

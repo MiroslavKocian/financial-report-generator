@@ -10,9 +10,9 @@ This document describes how the Financial Report Generator is structured: reques
 | `POST` | `/uploadfile/` | `create_upload_file` | JSON `UploadResponse` |
 | `GET` | `/summary` | `read_summary` | JSON `SummaryResponse` |
 | `GET` | `/report/grouped` | `read_grouped_report` | JSON `GroupedReportResponse` |
-| `GET` | `/report/export.xlsx` | `download_report` | Excel workbook (Summary + Grouped) |
+| `GET` | `/report/export.xlsx` | `download_report` | Excel workbook (Summary only) |
 
-`GET /report/grouped` and the Excel download accept an optional `group_by` query. When it is omitted, the app uses `region` if that column exists, otherwise `product`.
+`GET /report/grouped` accepts an optional `group_by` query. When it is omitted, the app uses `region` if that column exists, otherwise `product`.
 
 FastAPI also exposes OpenAPI at `/docs`. Pydantic models in `schemas.py` define the JSON shapes and appear in that documentation.
 
@@ -40,8 +40,8 @@ If any step before `publish_upload` fails, the `finally` block deletes the temp 
 ### Grouped report and Excel export
 
 1. **`grouped_sales`** — Same Decimal totals, split by `resolve_group_column` (`group_by`, else `region`, else `product`). Group order follows the first row seen, not alphabetical order.
-2. **`build_report_workbook`** (`export.py`) — Writes those totals to sheets `Summary` and `Grouped`.
-3. **`download_report`** — Returns the workbook as `financial-report.xlsx`.
+2. **`build_report_workbook`** (`export.py`) — Writes the summary totals to a `Summary` sheet.
+3. **`download_report`** — Returns the workbook as `financial-report.xlsx` (summary only; grouped totals stay on `/report/grouped`).
 
 Validation rules for `amount` are shared: upload uses `validate_sales_dataframe`; summary and grouped report use the same numeric checks.
 
@@ -104,7 +104,7 @@ Parameterized placeholders (`?`) are used for values. Identifiers come only from
 
 ### `export.py`
 
-- **`build_report_workbook`** — `.xlsx` bytes with sheets `Summary` and `Grouped`.
+- **`build_report_workbook`** — `.xlsx` bytes with a `Summary` sheet.
 
 ### `templates/index.html`
 

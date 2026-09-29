@@ -35,6 +35,7 @@ def test_read_root_endpoint(client: TestClient) -> None:
     assert "Upload and Store" in response.text
     assert 'href="/summary"' in response.text
     assert 'href="/report/grouped"' in response.text
+    assert "group_by=product" in response.text
     assert 'href="/report/export.xlsx"' in response.text
 
 
@@ -401,9 +402,8 @@ def test_grouped_report_and_excel_export(client: TestClient) -> None:
     assert "financial-report.xlsx" in exported.headers["content-disposition"]
 
     book = load_workbook(io.BytesIO(exported.content))
-    assert book.sheetnames == ["Summary", "Grouped"]
+    assert book.sheetnames == ["Summary"]
     assert book["Summary"]["B3"].value == "0.30"
-    assert book["Grouped"]["B1"].value == "region"
 
 
 def test_grouped_report_without_category_returns_400(
