@@ -69,7 +69,7 @@ Keep this terminal window open. The app runs as long as it is open. To stop it, 
 3. Click **Upload and Store**. The browser shows a short confirmation, for example:
 
    ```json
-   {"filename": "sales_example.xlsx", "file_id": 1, "rows_stored": 4, "status": "File uploaded and raw data stored via raw SQL"}
+   {"filename": "sales_example.xlsx", "file_id": 10, "rows_stored": 4, "status": "File uploaded and raw data stored via raw SQL"}
    ```
 
    ![Upload confirmation JSON](docs/images/sum.jpg)
