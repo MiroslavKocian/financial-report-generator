@@ -74,7 +74,7 @@ Keep this terminal window open. The app runs as long as it is open. To stop it, 
 
    ![Upload confirmation JSON](docs/images/sum.jpg)
 
-4. Open [http://127.0.0.1:8000/summary](http://127.0.0.1:8000/summary). For the sample file you will see money as two-decimal strings (not binary floats):
+4. Click **View summary report** on the upload page. For the sample file you will see money as two-decimal strings (not binary floats):
 
    ```json
    {"row_count": 4, "total_amount": "41.00", "min_amount": "1.00", "max_amount": "25.00"}
@@ -83,18 +83,18 @@ Keep this terminal window open. The app runs as long as it is open. To stop it, 
    ![Summary JSON for the sample file](docs/images/04-summary.jpg)
 
 5. Grouped report (sample file, after upload):
-   - By region: [http://127.0.0.1:8000/report/grouped?group_by=region](http://127.0.0.1:8000/report/grouped?group_by=region) — North `11.00`, South `30.00`.
+   - Click **View grouped report (by region)** — North `11.00`, South `30.00`.
 
      ![Grouped report by region](docs/images/reg.jpg)
 
-   - By product: [http://127.0.0.1:8000/report/grouped?group_by=product](http://127.0.0.1:8000/report/grouped?group_by=product) — A `35.00`, B `6.00`.
+   - Click **View grouped report (by product)** — A `35.00`, B `6.00`.
 
      ![Grouped report by product](docs/images/prod.jpg)
-6. Download the summary as Excel: [http://127.0.0.1:8000/report/export.xlsx](http://127.0.0.1:8000/report/export.xlsx). The workbook has one **Summary** sheet (same numbers as `/summary`).
+6. Click **Download Excel report**. The workbook has one **Summary** sheet (same numbers as `/summary`).
 
 Every new upload replaces the previous data. Uploading a file with the same name again is allowed.
 
-FastAPI also generates an interactive API page at [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs), where you can see and try every endpoint.
+Click **Open API docs** on the upload page. FastAPI generates an interactive API page where you can see and try every endpoint.
 
 ![FastAPI interactive API docs at /docs](docs/images/04-api-docs.jpg)
 
