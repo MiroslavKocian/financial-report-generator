@@ -1,7 +1,7 @@
 # Pytest, coverage, Ruff, and httpx for FastAPI's TestClient.
 # Docker does not install this file.
-# The app does not import httpx2 or httpcore2. Starlette warns that
-# TestClient prefers httpx2; tests keep the httpx client on purpose.
+# The app does not import httpx2. Pytest filters Starlette's warning
+# that TestClient prefers httpx2.
 certifi==2026.7.22
 colorama==0.4.6
 coverage==7.16.2

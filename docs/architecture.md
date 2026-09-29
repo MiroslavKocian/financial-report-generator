@@ -90,9 +90,9 @@ All persistence uses the `sqlite3` standard library and hand-written SQL (no ORM
 - **`init_db`** — `CREATE TABLE IF NOT EXISTS uploads`.
 - **`validate_sql_identifier`** — Regex guard before embedding table or column names in SQL.
 - **`replace_sales_dataset`** — Main write path for uploads: transactional full replace of the active dataset and dynamic table schema.
-- **`load_sales_dataframe`** — Main read path for summary.
+- **`load_sales_dataframe`** — Read path for summary, grouped report, and Excel export.
 
-Additional helpers (`ensure_dynamic_sales_table`, `insert_generic_row`, `store_dataframe_rows`, and others) support granular inserts and tests. The live upload path in `main.py` uses **`replace_sales_dataset`** only.
+Writes go through **`replace_sales_dataset`** only.
 
 Parameterized placeholders (`?`) are used for values. Identifiers come only from validated column names, not from raw user strings in SQL text.
 
@@ -123,5 +123,5 @@ Multipart form posting to `/uploadfile/`, plus links to `/summary`, grouped repo
 - **Single active dataset** — Each successful upload replaces all previous rows and metadata.
 - **Dynamic schema** — Excel columns become `TEXT` columns on `dynamic_sales_data`; reserved names `id` and `upload_id` are rejected.
 - **Money storage** — Amounts are `TEXT` decimal strings, not SQLite `REAL` or `NUMERIC`. `NUMERIC` affinity can store IEEE floats. The app parses those strings back with `Decimal` on read.
-- **Dependencies** — `requirements.txt` is the runtime lock (FastAPI, Uvicorn, pandas, openpyxl, and their transitive packages). `requirements-dev.txt` adds pytest, coverage, Ruff, and `httpx`/`httpcore` for the test client. The app does not import `httpx2` or `httpcore2`.
+- **Dependencies** — `requirements.txt` is the runtime lock (FastAPI, Uvicorn, pandas, openpyxl, and their transitive packages). `requirements-dev.txt` adds pytest, coverage, Ruff, and `httpx`/`httpcore` for the test client. The app does not import `httpx2`. Pytest hides Starlette's deprecation warning that asks tests to switch the client to `httpx2`.
 - **Separation of concerns** — Routes, files, Excel I/O, money, analytics, SQL, export, and API contracts live in `financial_report_generator/`.

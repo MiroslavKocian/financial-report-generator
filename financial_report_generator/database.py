@@ -161,18 +161,6 @@ def replace_sales_dataset(filename: str, dataframe: pd.DataFrame) -> StoredUploa
     return StoredUpload(upload_id=upload_id, rows_stored=len(dataframe))
 
 
-def clear_stored_upload_data() -> None:
-    """Drop sales rows and the uploads catalog."""
-    table_name: str = validate_sql_identifier(DYNAMIC_SALES_TABLE)
-    conn: sqlite3.Connection = get_db_connection()
-    try:
-        with conn:
-            conn.execute(f"DROP TABLE IF EXISTS {table_name}")
-            conn.execute("DELETE FROM uploads")
-    finally:
-        conn.close()
-
-
 def _table_exists(conn: sqlite3.Connection, table_name: str) -> bool:
     """True when sqlite_master lists the table."""
     cursor: sqlite3.Cursor = conn.execute(
@@ -195,110 +183,6 @@ def _existing_data_columns(
         row["name"] for row in cursor.fetchall() if row["name"] not in _RESERVED_COLUMNS
     ]
     return columns
-
-
-def save_upload_metadata(filename: str) -> int:
-    """Insert an uploads row and return its primary key (upload_id)."""
-    if not filename:
-        raise ValueError("filename is required.")
-
-    conn: sqlite3.Connection = get_db_connection()
-    try:
-        with conn:
-            cursor: sqlite3.Cursor = conn.cursor()
-            cursor.execute(
-                "INSERT INTO uploads (filename) VALUES (?)",
-                (filename,),
-            )
-            new_id: int | None = cursor.lastrowid
-    finally:
-        conn.close()
-
-    if new_id is None:
-        raise RuntimeError("SQLite did not return an upload id.")
-    return new_id
-
-
-def ensure_dynamic_sales_table(column_names: list[str]) -> None:
-    """Create dynamic_sales_data for the given columns."""
-    safe_columns: list[str] = _validate_data_columns(column_names)
-    table_name: str = validate_sql_identifier(DYNAMIC_SALES_TABLE)
-
-    conn: sqlite3.Connection = get_db_connection()
-    try:
-        if _table_exists(conn, table_name):
-            existing: list[str] = _existing_data_columns(conn, table_name)
-            if existing != safe_columns:
-                raise ValueError(
-                    "Existing dynamic_sales_data columns "
-                    f"{existing} do not match upload columns "
-                    f"{safe_columns}."
-                )
-            return
-
-        col_defs: str = _data_column_definitions(safe_columns)
-        with conn:
-            conn.execute(f"""
-                CREATE TABLE {table_name} (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    upload_id INTEGER,
-                    {col_defs},
-                    FOREIGN KEY (upload_id) REFERENCES uploads (id)
-                )
-            """)
-    finally:
-        conn.close()
-
-
-def insert_generic_row(table_name: str, row_data: dict[str, Any]) -> int:
-    """Insert one row with a dynamic raw SQL INSERT."""
-    safe_table: str = validate_sql_identifier(table_name)
-    if not row_data:
-        raise ValueError("row_data must not be empty.")
-
-    safe_columns: list[str] = [validate_sql_identifier(column) for column in row_data]
-    placeholders: str = ", ".join("?" for _ in safe_columns)
-    columns_sql: str = ", ".join(safe_columns)
-    values: tuple[Any, ...] = tuple(row_data[col] for col in safe_columns)
-
-    conn: sqlite3.Connection = get_db_connection()
-    try:
-        cursor: sqlite3.Cursor = conn.cursor()
-        cursor.execute(
-            f"""
-            INSERT INTO {safe_table}
-            ({columns_sql})
-            VALUES ({placeholders})
-            """,
-            values,
-        )
-        conn.commit()
-        new_row_id: int | None = cursor.lastrowid
-    except sqlite3.Error as exc:
-        conn.rollback()
-        raise RuntimeError(f"Failed to insert into {safe_table}: {exc}") from exc
-    finally:
-        conn.close()
-
-    if new_row_id is None:
-        raise RuntimeError("SQLite did not return a row id.")
-    return new_row_id
-
-
-def store_dataframe_rows(upload_id: int, dataframe: pd.DataFrame) -> int:
-    """Ensure the dynamic table matches the DataFrame, then insert all rows."""
-    column_names: list[str] = [str(col) for col in dataframe.columns]
-    ensure_dynamic_sales_table(column_names)
-
-    inserted_count: int = 0
-    for _, series in dataframe.iterrows():
-        row_payload: dict[str, Any] = {
-            column: _cell_value(column, series[column]) for column in column_names
-        }
-        row_payload["upload_id"] = upload_id
-        insert_generic_row(DYNAMIC_SALES_TABLE, row_payload)
-        inserted_count += 1
-    return inserted_count
 
 
 def load_sales_dataframe() -> pd.DataFrame:
