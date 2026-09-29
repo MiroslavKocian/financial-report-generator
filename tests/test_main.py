@@ -34,7 +34,7 @@ def test_read_root_endpoint(client: TestClient) -> None:
     assert response.status_code == 200
     assert "Upload and Store" in response.text
     assert 'href="/summary"' in response.text
-    assert 'href="/report/grouped"' in response.text
+    assert "group_by=region" in response.text
     assert "group_by=product" in response.text
     assert 'href="/report/export.xlsx"' in response.text
 

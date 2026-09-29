@@ -84,7 +84,12 @@ Keep this terminal window open. The app runs as long as it is open. To stop it, 
 
 5. Grouped report (sample file, after upload):
    - By region: [http://127.0.0.1:8000/report/grouped?group_by=region](http://127.0.0.1:8000/report/grouped?group_by=region) — North `11.00`, South `30.00`.
+
+     ![Grouped report by region](docs/images/04-grouped-region.jpg)
+
    - By product: [http://127.0.0.1:8000/report/grouped?group_by=product](http://127.0.0.1:8000/report/grouped?group_by=product) — A `35.00`, B `6.00`.
+
+     ![Grouped report by product](docs/images/04-grouped-product.jpg)
 6. Download the summary as Excel: [http://127.0.0.1:8000/report/export.xlsx](http://127.0.0.1:8000/report/export.xlsx). The workbook has one **Summary** sheet (same numbers as `/summary`).
 
 Every new upload replaces the previous data. Uploading a file with the same name again is allowed.

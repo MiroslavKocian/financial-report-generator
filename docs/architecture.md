@@ -108,7 +108,7 @@ Parameterized placeholders (`?`) are used for values. Identifiers come only from
 
 ### `templates/index.html`
 
-Multipart form posting to `/uploadfile/`, plus links to `/summary`, `/report/grouped`, `/report/export.xlsx`, and `/docs`. No business logic.
+Multipart form posting to `/uploadfile/`, plus links to `/summary`, grouped reports with `group_by=region` or `group_by=product`, `/report/export.xlsx`, and `/docs`. No business logic.
 
 ## Runtime artifacts (not in Git)
 
