@@ -6,7 +6,10 @@ from unittest.mock import patch
 import pandas as pd
 import pytest
 
-from excel_loader import load_excel_dataframe, normalize_column_name
+from financial_report_generator.excel_loader import (
+    load_excel_dataframe,
+    normalize_column_name,
+)
 
 
 def test_normalize_column_name() -> None:
@@ -36,7 +39,7 @@ def test_load_excel_dataframe_rejects_non_excel(tmp_path: Path) -> None:
 def test_load_excel_dataframe_rejects_empty_columns() -> None:
     empty_frame: pd.DataFrame = pd.DataFrame()
     with patch(
-        "excel_loader.pd.read_excel",
+        "financial_report_generator.excel_loader.pd.read_excel",
         return_value=empty_frame,
     ):
         with pytest.raises(ValueError, match="no columns"):
@@ -60,7 +63,7 @@ def test_load_excel_dataframe_rejects_duplicate_columns() -> None:
         columns=["Amount", "amount"],
     )
     with patch(
-        "excel_loader.pd.read_excel",
+        "financial_report_generator.excel_loader.pd.read_excel",
         return_value=duplicate_frame,
     ):
         with pytest.raises(ValueError, match="duplicate column"):

@@ -34,7 +34,9 @@
         <h1>Financial Report Generator</h1>
         <p>
             Upload one <code>.xlsx</code> file with an <code>amount</code> column.
-            The summary report shows total, minimum, and maximum amount.
+            The summary shows total, minimum, and maximum. The grouped report
+            splits those totals by region (or product). Amounts use two decimal
+            places, not binary floats.
         </p>
     </header>
 
@@ -51,6 +53,8 @@
             <input type="submit" value="Upload and Store">
         </form>
         <p><a href="/summary">View summary report</a></p>
+        <p><a href="/report/grouped">View grouped report</a></p>
+        <p><a href="/report/export.xlsx">Download Excel report</a></p>
         <p><a href="/docs">Open API docs</a></p>
     </main>
 

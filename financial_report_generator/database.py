@@ -8,6 +8,12 @@ from typing import Any
 
 import pandas as pd
 
+from financial_report_generator.money import (
+    AMOUNT_COLUMN,
+    format_amount,
+    parse_amount,
+)
+
 logger = logging.getLogger(__name__)
 
 DB_NAME: str = "sales_data.db"
@@ -64,10 +70,25 @@ def _validate_data_columns(column_names: list[str]) -> list[str]:
     return safe_columns
 
 
-def _cell_value(value: object) -> str | None:
-    """Store cell values as TEXT; missing cells become SQL NULL."""
+def _data_column_definitions(columns: list[str]) -> str:
+    """Join ``name TEXT`` definitions for Excel columns.
+
+    TEXT, not REAL or NUMERIC. Amounts are canonical decimal strings
+    (two places). SQLite NUMERIC affinity can store IEEE floats and
+    bring binary rounding back.
+    """
+    return ", ".join(f"{column} TEXT" for column in columns)
+
+
+def _cell_value(column: str, value: object) -> str | None:
+    """Store cell values as TEXT; missing cells become SQL NULL.
+
+    The amount column is quantized with Decimal before it is written.
+    """
     if pd.isna(value):
         return None
+    if column == AMOUNT_COLUMN:
+        return format_amount(parse_amount(value))
     return str(value)
 
 
@@ -98,7 +119,7 @@ def replace_sales_dataset(filename: str, dataframe: pd.DataFrame) -> StoredUploa
         if upload_id is None:
             raise RuntimeError("SQLite did not return an upload id.")
 
-        col_defs: str = ", ".join(f"{column} TEXT" for column in safe_columns)
+        col_defs: str = _data_column_definitions(safe_columns)
         conn.execute(
             f"""
             CREATE TABLE {table_name} (
@@ -117,7 +138,7 @@ def replace_sales_dataset(filename: str, dataframe: pd.DataFrame) -> StoredUploa
             row_values: list[tuple[Any, ...]] = [
                 (
                     upload_id,
-                    *(_cell_value(row[column]) for column in safe_columns),
+                    *(_cell_value(column, row[column]) for column in safe_columns),
                 )
                 for _, row in dataframe.iterrows()
             ]
@@ -215,7 +236,7 @@ def ensure_dynamic_sales_table(column_names: list[str]) -> None:
                 )
             return
 
-        col_defs: str = ", ".join(f"{column} TEXT" for column in safe_columns)
+        col_defs: str = _data_column_definitions(safe_columns)
         with conn:
             conn.execute(f"""
                 CREATE TABLE {table_name} (
@@ -271,11 +292,10 @@ def store_dataframe_rows(upload_id: int, dataframe: pd.DataFrame) -> int:
 
     inserted_count: int = 0
     for _, series in dataframe.iterrows():
-        row_dict: dict[str, Any] = series.to_dict()
         row_payload: dict[str, Any] = {
-            **row_dict,
-            "upload_id": upload_id,
+            column: _cell_value(column, series[column]) for column in column_names
         }
+        row_payload["upload_id"] = upload_id
         insert_generic_row(DYNAMIC_SALES_TABLE, row_payload)
         inserted_count += 1
     return inserted_count

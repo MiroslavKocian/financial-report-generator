@@ -3,11 +3,11 @@
 import os
 from io import BytesIO
 from types import SimpleNamespace
-from unittest.mock import mock_open, patch
+from unittest.mock import patch
 
 import pytest
 
-from file_manager import (
+from financial_report_generator.file_manager import (
     UPLOAD_DIR,
     clear_upload_dir,
     delete_uploaded_file,
@@ -20,7 +20,9 @@ from file_manager import (
 
 def test_create_upload_dir(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     fresh_dir = tmp_path / "new_uploads"
-    monkeypatch.setattr("file_manager.UPLOAD_DIR", str(fresh_dir))
+    monkeypatch.setattr(
+        "financial_report_generator.file_manager.UPLOAD_DIR", str(fresh_dir)
+    )
     assert not fresh_dir.exists()
 
     result: str = setup_upload_dir()
@@ -118,7 +120,9 @@ def test_clear_upload_dir_noop_when_upload_dir_missing(
     tmp_path,
 ) -> None:
     missing = tmp_path / "absent_uploads"
-    monkeypatch.setattr("file_manager.UPLOAD_DIR", str(missing))
+    monkeypatch.setattr(
+        "financial_report_generator.file_manager.UPLOAD_DIR", str(missing)
+    )
     clear_upload_dir()
 
 

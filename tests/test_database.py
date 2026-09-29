@@ -1,6 +1,5 @@
 """Tests for raw SQL database helpers."""
 
-import os
 import sqlite3
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -8,7 +7,7 @@ from unittest.mock import MagicMock, patch
 import pandas as pd
 import pytest
 
-from database import (
+from financial_report_generator.database import (
     DYNAMIC_SALES_TABLE,
     clear_stored_upload_data,
     ensure_dynamic_sales_table,
@@ -58,7 +57,7 @@ def test_replace_sales_dataset_stores_sql_null_for_missing_cells() -> None:
         f"SELECT amount FROM {DYNAMIC_SALES_TABLE} ORDER BY id"
     ).fetchall()
     conn.close()
-    assert rows[0]["amount"] == "1.0"
+    assert rows[0]["amount"] == "1.00"
     assert rows[1]["amount"] is None
 
 
@@ -68,7 +67,9 @@ def test_replace_sales_dataset_raises_when_upload_id_missing() -> None:
     mock_conn = MagicMock()
     mock_conn.execute.return_value = mock_cursor
 
-    with patch("database.get_db_connection", return_value=mock_conn):
+    with patch(
+        "financial_report_generator.database.get_db_connection", return_value=mock_conn
+    ):
         with pytest.raises(RuntimeError, match="upload id"):
             replace_sales_dataset("orphan.xlsx", pd.DataFrame({"amount": [1.0]}))
 
@@ -92,7 +93,7 @@ def test_replace_sales_dataset_rolls_back_on_sqlite_error(
             return getattr(inner, name)
 
     with patch(
-        "database.get_db_connection",
+        "financial_report_generator.database.get_db_connection",
         return_value=_FailingConnection(),
     ):
         with caplog.at_level("ERROR"):
@@ -104,7 +105,7 @@ def test_replace_sales_dataset_rolls_back_on_sqlite_error(
 
     assert "disk" in caplog.text
     loaded = load_sales_dataframe()
-    assert loaded.iloc[0]["amount"] in {"1.0", "1"}
+    assert loaded.iloc[0]["amount"] == "1.00"
 
 
 def test_save_upload_metadata() -> None:
@@ -200,7 +201,7 @@ def test_store_dataframe_rows() -> None:
 
     assert row is not None
     assert row["region"] == "North"
-    assert row["amount"] == "10.5" or row["amount"] == 10.5
+    assert row["amount"] == "10.50"
     assert row["upload_id"] == upload_id
 
 
@@ -273,7 +274,7 @@ def test_save_upload_metadata_raises_when_lastrowid_missing() -> None:
     mock_conn.__exit__.return_value = False
 
     with patch(
-        "database.get_db_connection",
+        "financial_report_generator.database.get_db_connection",
         return_value=mock_conn,
     ):
         with pytest.raises(RuntimeError, match="upload id"):
@@ -287,7 +288,7 @@ def test_insert_generic_row_raises_when_lastrowid_missing() -> None:
     mock_conn.cursor.return_value = mock_cursor
 
     with patch(
-        "database.get_db_connection",
+        "financial_report_generator.database.get_db_connection",
         return_value=mock_conn,
     ):
         with pytest.raises(RuntimeError, match="row id"):
@@ -308,7 +309,7 @@ def test_load_sales_dataframe_reads_stored_rows() -> None:
 
     assert list(loaded.columns) == ["amount"]
     assert len(loaded) == 2
-    assert str(loaded.iloc[0]["amount"]) in {"10.5", "10.50"}
+    assert loaded.iloc[0]["amount"] == "10.50"
 
 
 def test_load_sales_dataframe_requires_stored_data() -> None:
@@ -375,7 +376,10 @@ def test_load_sales_dataframe_wraps_sqlite_error(
         def close(self) -> None:
             real_conn.close()
 
-    with patch("database.get_db_connection", return_value=_FailingSelect()):
+    with patch(
+        "financial_report_generator.database.get_db_connection",
+        return_value=_FailingSelect(),
+    ):
         with caplog.at_level("ERROR"):
             with pytest.raises(RuntimeError, match="Failed to load sales data"):
                 load_sales_dataframe()

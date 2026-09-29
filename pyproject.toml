@@ -1,12 +1,19 @@
 [tool.ruff]
 line-length = 88
+src = ["financial_report_generator", "tests"]
 
 [tool.ruff.lint]
-select = ["E501"]
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["fastapi.File", "fastapi.Query"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["financial_report_generator"]
 
 [tool.pytest.ini_options]
 minversion = "7.0"
-addopts = "--cov=database --cov=file_manager --cov=excel_loader --cov=analysis --cov=main --cov=schemas --cov-report=term-missing --cov-fail-under=100"
+addopts = "--cov=financial_report_generator --cov-report=term-missing --cov-fail-under=100"
 testpaths = ["tests"]
 
 [tool.coverage.report]

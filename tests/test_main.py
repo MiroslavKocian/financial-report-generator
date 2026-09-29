@@ -9,10 +9,11 @@ from unittest.mock import patch
 import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
+from openpyxl import load_workbook
 
-from database import DB_NAME, DYNAMIC_SALES_TABLE
-from file_manager import UPLOAD_DIR
-from main import app
+from financial_report_generator.database import DB_NAME, DYNAMIC_SALES_TABLE
+from financial_report_generator.file_manager import UPLOAD_DIR
+from financial_report_generator.main import app
 
 
 @pytest.fixture
@@ -33,6 +34,8 @@ def test_read_root_endpoint(client: TestClient) -> None:
     assert response.status_code == 200
     assert "Upload and Store" in response.text
     assert 'href="/summary"' in response.text
+    assert 'href="/report/grouped"' in response.text
+    assert 'href="/report/export.xlsx"' in response.text
 
 
 _MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -68,16 +71,19 @@ def test_summary_returns_total_min_and_max(client: TestClient) -> None:
     assert response.status_code == 200
     body = response.json()
     assert body["row_count"] == 3
-    assert body["total_amount"] == 40.0
-    assert body["min_amount"] == 5.0
-    assert body["max_amount"] == 25.0
+    assert body["total_amount"] == "40.00"
+    assert body["min_amount"] == "5.00"
+    assert body["max_amount"] == "25.00"
 
 
 def test_summary_runtime_error_returns_500(
     client: TestClient,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    with patch("main.load_sales_dataframe", side_effect=RuntimeError("db down")):
+    with patch(
+        "financial_report_generator.main.load_sales_dataframe",
+        side_effect=RuntimeError("db down"),
+    ):
         with caplog.at_level(logging.ERROR):
             response = client.get("/summary")
     assert response.status_code == 500
@@ -187,7 +193,7 @@ def test_upload_same_filename_replaces_dataset(client: TestClient) -> None:
 
 def test_upload_save_value_error_returns_400(client: TestClient) -> None:
     with patch(
-        "main.sanitize_filename",
+        "financial_report_generator.main.sanitize_filename",
         side_effect=ValueError("Uploaded file must have a filename."),
     ):
         response = client.post(
@@ -200,7 +206,7 @@ def test_upload_save_value_error_returns_400(client: TestClient) -> None:
 
 def test_upload_save_oserror_returns_500(client: TestClient) -> None:
     with patch(
-        "main.save_temporary_upload",
+        "financial_report_generator.main.save_temporary_upload",
         side_effect=OSError("disk full"),
     ):
         response = client.post(
@@ -217,7 +223,7 @@ def test_upload_store_runtime_error_returns_500(client: TestClient) -> None:
     )
 
     with patch(
-        "main.replace_sales_dataset",
+        "financial_report_generator.main.replace_sales_dataset",
         side_effect=RuntimeError("insert failed"),
     ):
         response = client.post(
@@ -257,7 +263,7 @@ def test_upload_rejects_missing_amount_before_replace(client: TestClient) -> Non
     assert response.status_code == 400
     with open(keep_path, "rb") as handle:
         assert handle.read() == before
-    assert client.get("/summary").json()["total_amount"] == 1.0
+    assert client.get("/summary").json()["total_amount"] == "1.00"
 
 
 def test_upload_replaces_previous_dataset(client: TestClient) -> None:
@@ -361,3 +367,88 @@ def test_upload_invalid_second_file_keeps_previous_data(client: TestClient) -> N
 
     assert uploads_count == 1
     assert data_count == 1
+
+
+def test_grouped_report_and_excel_export(client: TestClient) -> None:
+    uploaded = _post_excel(
+        client,
+        "sales.xlsx",
+        pd.DataFrame(
+            {
+                "Region": ["South", "North"],
+                "Product": ["B", "A"],
+                "Amount": [0.1, 0.2],
+            }
+        ),
+    )
+    assert uploaded.status_code == 200
+
+    grouped = client.get("/report/grouped")
+    assert grouped.status_code == 200
+    body = grouped.json()
+    assert body["group_by"] == "region"
+    assert body["total_amount"] == "0.30"
+    assert body["groups"][0]["group"] == "South"
+    assert body["groups"][0]["total_amount"] == "0.10"
+
+    by_product = client.get("/report/grouped", params={"group_by": "product"})
+    assert by_product.status_code == 200
+    assert by_product.json()["group_by"] == "product"
+
+    exported = client.get("/report/export.xlsx")
+    assert exported.status_code == 200
+    assert exported.headers["content-type"].startswith(_MIME)
+    assert "financial-report.xlsx" in exported.headers["content-disposition"]
+
+    book = load_workbook(io.BytesIO(exported.content))
+    assert book.sheetnames == ["Summary", "Grouped"]
+    assert book["Summary"]["B3"].value == "0.30"
+    assert book["Grouped"]["B1"].value == "region"
+
+
+def test_grouped_report_without_category_returns_400(
+    client: TestClient,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    assert (
+        _post_excel(
+            client,
+            "only.xlsx",
+            pd.DataFrame({"Amount": [1]}),
+        ).status_code
+        == 200
+    )
+    with caplog.at_level(logging.WARNING):
+        response = client.get("/report/grouped")
+    assert response.status_code == 400
+    assert "region or product" in response.json()["detail"]
+    assert "Report request failed" in caplog.text
+
+
+def test_grouped_report_without_data_returns_400(client: TestClient) -> None:
+    response = client.get("/report/grouped")
+    assert response.status_code == 400
+    assert "No sales data" in response.json()["detail"]
+
+
+def test_report_runtime_error_returns_500(
+    client: TestClient,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    with patch(
+        "financial_report_generator.main.load_sales_dataframe",
+        side_effect=RuntimeError("db down"),
+    ):
+        with caplog.at_level(logging.ERROR):
+            grouped = client.get("/report/grouped")
+            exported = client.get("/report/export.xlsx")
+    assert grouped.status_code == 500
+    assert exported.status_code == 500
+    assert "server log" in grouped.json()["detail"].lower()
+    assert "Report request failed" in caplog.text
+
+
+def test_export_without_data_returns_400(client: TestClient) -> None:
+    response = client.get("/report/export.xlsx")
+    assert response.status_code == 400
+    assert "No sales data" in response.json()["detail"]

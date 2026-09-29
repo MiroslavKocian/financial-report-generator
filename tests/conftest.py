@@ -2,7 +2,7 @@
 
 import pytest
 
-from database import init_db
+from financial_report_generator.database import init_db
 
 
 @pytest.fixture(autouse=True)
@@ -13,8 +13,14 @@ def isolated_storage(monkeypatch: pytest.MonkeyPatch, tmp_path):
     upload_dir.mkdir()
 
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr("database.DB_NAME", str(database_file))
-    monkeypatch.setattr("file_manager.UPLOAD_DIR", str(upload_dir))
+    monkeypatch.setattr(
+        "financial_report_generator.database.DB_NAME",
+        str(database_file),
+    )
+    monkeypatch.setattr(
+        "financial_report_generator.file_manager.UPLOAD_DIR",
+        str(upload_dir),
+    )
 
     init_db()
     yield

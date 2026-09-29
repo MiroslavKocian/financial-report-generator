@@ -31,6 +31,7 @@ Windows (PowerShell):
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
+pip install -r requirements-dev.txt
 ```
 
 macOS / Linux:
@@ -39,7 +40,10 @@ macOS / Linux:
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+pip install -r requirements-dev.txt
 ```
+
+`requirements.txt` is what the app needs to run. `requirements-dev.txt` adds pytest, coverage, and Ruff. Docker installs only `requirements.txt`.
 
 If PowerShell refuses to run `Activate.ps1`, run this once and try again:
 
@@ -61,6 +65,8 @@ Keep this terminal window open. The app runs as long as it is open. To stop it, 
 
    ![Upload page at http://127.0.0.1:8000](docs/images/04-upload-page.jpg)
 
+   The page also links to the grouped report and the Excel download (steps 5 and 6).
+
 2. Under **Select Excel file**, click the file button and pick the sample file `sales_example.xlsx`. It is in the `examples` folder inside the project folder you downloaded in step 1.
 3. Click **Upload and Store**. The browser shows a short confirmation, for example:
 
@@ -70,13 +76,16 @@ Keep this terminal window open. The app runs as long as it is open. To stop it, 
 
    ![Upload confirmation JSON](docs/images/04-upload-response.jpg)
 
-4. Open [http://127.0.0.1:8000/summary](http://127.0.0.1:8000/summary). For the sample file you will see:
+4. Open [http://127.0.0.1:8000/summary](http://127.0.0.1:8000/summary). For the sample file you will see money as two-decimal strings (not binary floats):
 
    ```json
-   {"row_count": 2, "total_amount": 35.0, "min_amount": 10.0, "max_amount": 25.0}
+   {"row_count": 2, "total_amount": "35.00", "min_amount": "10.00", "max_amount": "25.00"}
    ```
 
    ![Summary JSON for the sample file](docs/images/04-summary.jpg)
+
+5. Open [http://127.0.0.1:8000/report/grouped](http://127.0.0.1:8000/report/grouped). The sample file is grouped by `region` (North 10.00, South 25.00). Pass `?group_by=product` to group by product instead.
+6. Download the same totals as Excel: [http://127.0.0.1:8000/report/export.xlsx](http://127.0.0.1:8000/report/export.xlsx). The workbook has a **Summary** sheet and a **Grouped** sheet. The upload page links to both reports.
 
 Every new upload replaces the previous data. Uploading a file with the same name again is allowed.
 
@@ -106,7 +115,8 @@ The database lives inside the container, so after `docker compose down` the data
 
 - The file must be `.xlsx`.
 - It must have a column named `amount`. Capital letters and extra spaces in the header are fine (`Amount`, ` AMOUNT `).
-- Every `amount` cell must be a number, and the file must have at least one data row.
+- Every `amount` cell must be a number, and the file must have at least one data row. Amounts are stored and returned as decimal text with two places (`10.00`), so totals do not use binary floats.
+- A grouped report needs `region` or `product`, unless you pass another stored column as `group_by`. The sample file has both; the default group is `region`.
 - Other columns (for example `region`, `product`) are saved too.
 - Column names may contain only letters, digits, and underscores (spaces become underscores). `id` and `upload_id` are not allowed as column names.
 
@@ -121,23 +131,27 @@ flowchart TD
     read --> check[Check the amount column]
     check --> db[Replace data in SQLite in one transaction]
     db --> publish[Keep the file under its real name]
-    summary[Summary page] --> query[Read rows from SQLite]
-    query --> totals[Compute total, min, max with pandas]
+    summary[Summary and grouped report] --> query[Read rows from SQLite]
+    query --> totals[Compute totals with Decimal]
+    totals --> export[Excel workbook with Summary and Grouped sheets]
 ```
 
 1. The uploaded file is first saved as a temporary copy.
 2. pandas reads it and the `amount` column is checked.
 3. Only if everything is valid, the old data is replaced with the new rows in a single database transaction. If anything fails, the old data stays untouched.
-4. The summary page reads the rows back from SQLite and computes the numbers.
+4. Summary and grouped report read the rows back from SQLite and compute totals with `Decimal`. Excel export writes those totals to a workbook.
 
 | File | Responsibility |
 |------|----------------|
-| `main.py` | Web routes and the upload flow |
-| `file_manager.py` | Safe file names, temporary file, final file |
-| `excel_loader.py` | Reading Excel and cleaning up column names |
-| `analysis.py` | Checking `amount` and computing the summary |
-| `database.py` | All SQL queries |
-| `schemas.py` | Shape of the JSON responses |
+| `main.py` | Starts the app (`python main.py`) |
+| `financial_report_generator/main.py` | Web routes and the upload flow |
+| `financial_report_generator/file_manager.py` | Safe file names, temporary file, final file |
+| `financial_report_generator/excel_loader.py` | Reading Excel and cleaning up column names |
+| `financial_report_generator/analysis.py` | Checking `amount`, summary, and grouped totals |
+| `financial_report_generator/money.py` | Decimal parse and two-decimal text |
+| `financial_report_generator/database.py` | All SQL queries |
+| `financial_report_generator/export.py` | Excel workbook for the report |
+| `financial_report_generator/schemas.py` | Shape of the JSON responses |
 | `templates/index.html` | Upload page |
 
 For a longer walkthrough (request flow, key functions per module, and design notes), see [docs/architecture.md](docs/architecture.md).
@@ -149,6 +163,7 @@ Files created while the app runs (not stored in Git): `sales_data.db` (the datab
 With the virtual environment active:
 
 ```sh
+pip install -r requirements-dev.txt
 pytest
 ruff check .
 ruff format --check .
@@ -163,11 +178,15 @@ GitHub runs the same three commands automatically after every push (file `.githu
 ```text
 financial-report-generator/
 ├── main.py
-├── database.py
-├── file_manager.py
-├── excel_loader.py
-├── analysis.py
-├── schemas.py
+├── financial_report_generator/
+│   ├── main.py
+│   ├── database.py
+│   ├── file_manager.py
+│   ├── excel_loader.py
+│   ├── analysis.py
+│   ├── money.py
+│   ├── export.py
+│   └── schemas.py
 ├── templates/
 │   └── index.html
 ├── examples/
@@ -180,6 +199,7 @@ financial-report-generator/
 ├── Dockerfile
 ├── compose.yaml
 ├── requirements.txt
+├── requirements-dev.txt
 ├── pyproject.toml
 └── AGENTS.md
 ```

@@ -9,6 +9,10 @@ This document describes how the Financial Report Generator is structured: reques
 | `GET` | `/` | `read_root` | HTML upload form (`templates/index.html`) |
 | `POST` | `/uploadfile/` | `create_upload_file` | JSON `UploadResponse` |
 | `GET` | `/summary` | `read_summary` | JSON `SummaryResponse` |
+| `GET` | `/report/grouped` | `read_grouped_report` | JSON `GroupedReportResponse` |
+| `GET` | `/report/export.xlsx` | `download_report` | Excel workbook (Summary + Grouped) |
+
+`GET /report/grouped` and the Excel download accept an optional `group_by` query. When it is omitted, the app uses `region` if that column exists, otherwise `product`.
 
 FastAPI also exposes OpenAPI at `/docs`. Pydantic models in `schemas.py` define the JSON shapes and appear in that documentation.
 
@@ -21,8 +25,8 @@ The upload route orchestrates other modules; it does not parse Excel or run SQL 
 1. **`sanitize_filename`** (`file_manager.py`) — Keep only the final path segment so uploads cannot use path traversal (`../../../etc/passwd`).
 2. **`save_temporary_upload`** — Stream bytes into a `.part` file under `uploads/`. The final filename is not used yet.
 3. **`load_excel_dataframe`** (`excel_loader.py`) — Read `.xlsx` with pandas/openpyxl; normalize column headers to SQL-friendly names.
-4. **`validate_sales_dataframe`** (`analysis.py`) — Require an `amount` column with numeric values and at least one data row.
-5. **`replace_sales_dataset`** (`database.py`) — In one SQLite transaction: drop the previous sales table, clear `uploads`, insert the new upload row, create `dynamic_sales_data` with columns matching the Excel headers, insert all rows with parameterized SQL.
+4. **`validate_sales_dataframe`** (`analysis.py`) — Require an `amount` column whose cells parse as `Decimal` and at least one data row.
+5. **`replace_sales_dataset`** (`database.py`) — In one SQLite transaction: drop the previous sales table, clear `uploads`, insert the new upload row, create `dynamic_sales_data` with columns matching the Excel headers, insert all rows with parameterized SQL. Amount cells are written as two-decimal text (`10.00`).
 6. **`publish_upload`** (`file_manager.py`) — Move the temp file to `uploads/<safe_name>` and remove older files in `uploads/`.
 
 If any step before `publish_upload` fails, the `finally` block deletes the temp file. If the database step fails, the transaction rolls back and the previous dataset remains. A bad file never overwrites good data on disk or in SQLite.
@@ -30,19 +34,29 @@ If any step before `publish_upload` fails, the `finally` block deletes the temp 
 ## Summary pipeline
 
 1. **`load_sales_dataframe`** (`database.py`) — `SELECT` all user data columns from `dynamic_sales_data` into a pandas `DataFrame`.
-2. **`summarize_sales`** (`analysis.py`) — Compute `row_count`, `total_amount`, `min_amount`, `max_amount` from the `amount` column (rounded to two decimal places).
+2. **`summarize_sales`** (`analysis.py`) — Compute `row_count`, `total_amount`, `min_amount`, and `max_amount` with `Decimal`, then format each money value as a two-decimal string.
 3. Return a **`SummaryResponse`** instance.
 
-Validation rules for `amount` are shared: upload uses `validate_sales_dataframe`; summary uses the same numeric checks inside `summarize_sales`.
+### Grouped report and Excel export
+
+1. **`grouped_sales`** — Same Decimal totals, split by `resolve_group_column` (`group_by`, else `region`, else `product`). Group order follows the first row seen, not alphabetical order.
+2. **`build_report_workbook`** (`export.py`) — Writes those totals to sheets `Summary` and `Grouped`.
+3. **`download_report`** — Returns the workbook as `financial-report.xlsx`.
+
+Validation rules for `amount` are shared: upload uses `validate_sales_dataframe`; summary and grouped report use the same numeric checks.
 
 ## Module reference
 
-### `main.py`
+### `financial_report_generator/main.py`
+
+The project-root `main.py` only starts Uvicorn. Routes live in the package.
 
 - **`lifespan`** — Application startup: `init_db()`.
 - **`read_root`** — Serve the upload page.
 - **`create_upload_file`** — Full upload pipeline; map `ValueError` to HTTP 400 and infrastructure errors to HTTP 500; log failures.
 - **`read_summary`** — Load data and return the summary JSON.
+- **`read_grouped_report`** — Load data and return grouped Decimal totals.
+- **`download_report`** — Load data and return the Excel workbook.
 
 ### `file_manager.py`
 
@@ -60,13 +74,14 @@ Disk layout mirrors the safety story in the database: validate and persist to SQ
 
 Normalized names must pass `validate_sql_identifier` in `database.py` when columns become part of `CREATE TABLE`.
 
-### `analysis.py`
+### `money.py` and `analysis.py`
 
+- **`parse_amount` / `format_amount`** — Quantize to cents with half-up rounding and serialize as `"10.00"`.
 - **`validate_sales_dataframe`** — Called before any database replace.
 - **`summarize_sales`** — Aggregates for the summary endpoint.
-- **`_numeric_amounts`** (internal) — Ensures `amount` exists and is numeric.
+- **`grouped_sales`** — Same aggregates per group.
 
-Pandas handles validation and aggregation; SQLite handles storage. The same summary could be expressed in SQL (`SUM`, `MIN`, `MAX`); this project keeps aggregates in pandas for clarity while learning the stack.
+Pandas holds rows. Totals are `Decimal`, not `float`, so `0.1 + 0.2` is `0.30`. SQL `SUM` is not used: SQLite would coerce the text amounts through numeric affinity and could reintroduce binary floats.
 
 ### `database.py`
 
@@ -84,11 +99,16 @@ Parameterized placeholders (`?`) are used for values. Identifiers come only from
 ### `schemas.py`
 
 - **`UploadResponse`** — `filename`, `file_id`, `rows_stored`, `status`.
-- **`SummaryResponse`** — `row_count`, `total_amount`, `min_amount`, `max_amount`.
+- **`SummaryResponse`** — `row_count`, `total_amount`, `min_amount`, `max_amount` (money fields are strings).
+- **`GroupedReportResponse`** — `group_by`, overall totals, and one `GroupRow` per group.
+
+### `export.py`
+
+- **`build_report_workbook`** — `.xlsx` bytes with sheets `Summary` and `Grouped`.
 
 ### `templates/index.html`
 
-Multipart form posting to `/uploadfile/`, plus links to `/summary` and `/docs`. No business logic.
+Multipart form posting to `/uploadfile/`, plus links to `/summary`, `/report/grouped`, `/report/export.xlsx`, and `/docs`. No business logic.
 
 ## Runtime artifacts (not in Git)
 
@@ -102,4 +122,6 @@ Multipart form posting to `/uploadfile/`, plus links to `/summary` and `/docs`. 
 - **Validate before write** — Excel and `amount` checks run before `replace_sales_dataset` and before `publish_upload`.
 - **Single active dataset** — Each successful upload replaces all previous rows and metadata.
 - **Dynamic schema** — Excel columns become `TEXT` columns on `dynamic_sales_data`; reserved names `id` and `upload_id` are rejected.
-- **Separation of concerns** — Routes, files, Excel I/O, analytics, SQL, and API contracts live in separate modules as listed in the README table.
+- **Money storage** — Amounts are `TEXT` decimal strings, not SQLite `REAL` or `NUMERIC`. `NUMERIC` affinity can store IEEE floats. The app parses those strings back with `Decimal` on read.
+- **Dependencies** — `requirements.txt` is the runtime lock (FastAPI, Uvicorn, pandas, openpyxl, and their transitive packages). `requirements-dev.txt` adds pytest, coverage, Ruff, and `httpx`/`httpcore` for the test client. The app does not import `httpx2` or `httpcore2`.
+- **Separation of concerns** — Routes, files, Excel I/O, money, analytics, SQL, export, and API contracts live in `financial_report_generator/`.
