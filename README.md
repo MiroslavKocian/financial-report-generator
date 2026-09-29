@@ -2,7 +2,7 @@
 
 [![Tests](https://github.com/MiroslavKocian/financial-report-generator/actions/workflows/test.yml/badge.svg)](https://github.com/MiroslavKocian/financial-report-generator/actions/workflows/test.yml)
 
-A small web app: you upload an Excel file with sales data, the app saves every row into a SQLite database, and a summary page shows the total, minimum, and maximum `amount`.
+A small web app: you upload an Excel file with sales data, the app saves every row into a SQLite database, and you can view a summary, grouped JSON reports, and an Excel summary export with decimal-safe `amount` totals.
 
 Built with Python 3.11, FastAPI, pandas, and SQLite. All database queries are plain SQL written by hand (no Object–relational mapping).
 
@@ -65,8 +65,6 @@ Keep this terminal window open. The app runs as long as it is open. To stop it, 
 
    ![Upload page at http://127.0.0.1:8000](docs/images/04-upload-page.jpg)
 
-   The page also links to the grouped report and the Excel download (steps 5 and 6).
-
 2. Under **Select Excel file**, click the file button and pick the sample file `sales_example.xlsx`. It is in the `examples` folder inside the project folder you downloaded in step 1.
 3. Click **Upload and Store**. The browser shows a short confirmation, for example:
 
@@ -84,7 +82,9 @@ Keep this terminal window open. The app runs as long as it is open. To stop it, 
 
    ![Summary JSON for the sample file](docs/images/04-summary.jpg)
 
-5. Open [http://127.0.0.1:8000/report/grouped](http://127.0.0.1:8000/report/grouped). The sample file is grouped by `region` (North 11.00, South 30.00). Use the **by product** link on the upload page, or `?group_by=product`, for product A 35.00 and B 6.00.
+5. Grouped report (sample file, after upload):
+   - By region: [http://127.0.0.1:8000/report/grouped?group_by=region](http://127.0.0.1:8000/report/grouped?group_by=region) — North `11.00`, South `30.00`.
+   - By product: [http://127.0.0.1:8000/report/grouped?group_by=product](http://127.0.0.1:8000/report/grouped?group_by=product) — A `35.00`, B `6.00`.
 6. Download the summary as Excel: [http://127.0.0.1:8000/report/export.xlsx](http://127.0.0.1:8000/report/export.xlsx). The workbook has one **Summary** sheet (same numbers as `/summary`).
 
 Every new upload replaces the previous data. Uploading a file with the same name again is allowed.
