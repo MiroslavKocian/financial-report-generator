@@ -24,7 +24,5 @@ def test_sales_example_workbook() -> None:
 
     by_product = grouped_sales(frame, group_by="product")
     assert by_product["group_by"] == "product"
-    product_groups = {
-        row["group"]: row["total_amount"] for row in by_product["groups"]
-    }
+    product_groups = {row["group"]: row["total_amount"] for row in by_product["groups"]}
     assert product_groups == {"A": "35.00", "B": "6.00"}
